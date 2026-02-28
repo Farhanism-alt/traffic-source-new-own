@@ -14,11 +14,18 @@ export default withAuth(function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    return res.status(200).json({ site });
+    const maskedSite = { ...site };
+    if (maskedSite.stripe_secret_key) {
+      maskedSite.stripe_secret_key = '••••' + maskedSite.stripe_secret_key.slice(-4);
+    }
+    if (maskedSite.stripe_webhook_secret) {
+      maskedSite.stripe_webhook_secret = '••••' + maskedSite.stripe_webhook_secret.slice(-4);
+    }
+    return res.status(200).json({ site: maskedSite });
   }
 
   if (req.method === 'PUT') {
-    const { domain, name } = req.body;
+    const { domain, name, stripe_secret_key, stripe_webhook_secret } = req.body;
     const cleanDomain = domain
       ? domain.replace(/^https?:\/\//, '').replace(/\/+$/, '')
       : site.domain;
@@ -29,8 +36,28 @@ export default withAuth(function handler(req, res) {
       id
     );
 
+    if (stripe_secret_key !== undefined) {
+      db.prepare('UPDATE sites SET stripe_secret_key = ? WHERE id = ?').run(
+        stripe_secret_key || null,
+        id
+      );
+    }
+    if (stripe_webhook_secret !== undefined) {
+      db.prepare('UPDATE sites SET stripe_webhook_secret = ? WHERE id = ?').run(
+        stripe_webhook_secret || null,
+        id
+      );
+    }
+
     const updated = db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
-    return res.status(200).json({ site: updated });
+    const maskedUpdated = { ...updated };
+    if (maskedUpdated.stripe_secret_key) {
+      maskedUpdated.stripe_secret_key = '••••' + maskedUpdated.stripe_secret_key.slice(-4);
+    }
+    if (maskedUpdated.stripe_webhook_secret) {
+      maskedUpdated.stripe_webhook_secret = '••••' + maskedUpdated.stripe_webhook_secret.slice(-4);
+    }
+    return res.status(200).json({ site: maskedUpdated });
   }
 
   if (req.method === 'DELETE') {

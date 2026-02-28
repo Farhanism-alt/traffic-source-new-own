@@ -7,7 +7,7 @@ export default withAuth(function handler(req, res) {
   if (req.method === 'GET') {
     const sites = db
       .prepare(
-        `SELECT s.*,
+        `SELECT s.id, s.user_id, s.domain, s.name, s.created_at,
           (SELECT COUNT(*) FROM page_views pv WHERE pv.site_id = s.id
            AND pv.timestamp >= datetime('now', '-7 days')) as views_7d
          FROM sites s WHERE s.user_id = ? ORDER BY s.created_at DESC`

@@ -32,7 +32,7 @@ function getTrackingRef() {
 // Pass the return value as client_reference_id when creating a Stripe Checkout Session
 </script>`;
 
-  const webhookUrl = `${appUrl}/api/stripe/webhook`;
+  const webhookUrl = `${appUrl}/api/stripe/webhook/${site.id}`;
 
   res.status(200).json({
     site,

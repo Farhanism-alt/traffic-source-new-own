@@ -9,6 +9,12 @@ export default function Sites() {
   const [showModal, setShowModal] = useState(false);
   const [showSnippet, setShowSnippet] = useState(null);
   const [snippetData, setSnippetData] = useState(null);
+  const [showStripeSettings, setShowStripeSettings] = useState(null);
+  const [stripeSecretKey, setStripeSecretKey] = useState('');
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState('');
+  const [stripeSaving, setStripeSaving] = useState(false);
+  const [stripeMessage, setStripeMessage] = useState('');
+  const [stripeError, setStripeError] = useState('');
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
   const [error, setError] = useState('');
@@ -57,6 +63,53 @@ export default function Sites() {
       const data = await res.json();
       setSnippetData(data);
       setShowSnippet(siteId);
+    }
+  };
+
+  const loadStripeSettings = async (e, siteId) => {
+    e.stopPropagation();
+    const res = await fetch(`/api/sites/${siteId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setStripeSecretKey(data.site.stripe_secret_key || '');
+      setStripeWebhookSecret(data.site.stripe_webhook_secret || '');
+      setStripeMessage('');
+      setStripeError('');
+      setShowStripeSettings(siteId);
+    }
+  };
+
+  const handleSaveStripe = async (e) => {
+    e.preventDefault();
+    setStripeSaving(true);
+    setStripeMessage('');
+    setStripeError('');
+    try {
+      const body = {};
+      if (stripeSecretKey && !stripeSecretKey.startsWith('••••')) {
+        body.stripe_secret_key = stripeSecretKey;
+      }
+      if (stripeWebhookSecret && !stripeWebhookSecret.startsWith('••••')) {
+        body.stripe_webhook_secret = stripeWebhookSecret;
+      }
+      if (Object.keys(body).length === 0) {
+        setStripeMessage('No changes to save');
+        return;
+      }
+      const res = await fetch(`/api/sites/${showStripeSettings}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStripeSecretKey(data.site.stripe_secret_key || '');
+      setStripeWebhookSecret(data.site.stripe_webhook_secret || '');
+      setStripeMessage('Stripe keys saved');
+    } catch (err) {
+      setStripeError(err.message);
+    } finally {
+      setStripeSaving(false);
     }
   };
 
@@ -116,6 +169,12 @@ export default function Sites() {
                       }}
                     >
                       Snippet
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={(e) => loadStripeSettings(e, site.id)}
+                    >
+                      Stripe
                     </button>
                     <button
                       className="btn btn-danger btn-sm"
@@ -231,6 +290,59 @@ export default function Sites() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+        {/* Stripe Settings Modal */}
+        {showStripeSettings && (
+          <div className="modal-overlay" onClick={() => setShowStripeSettings(null)}>
+            <div className="modal" style={{ maxWidth: 500 }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Stripe Settings</h2>
+                <button onClick={() => setShowStripeSettings(null)}>x</button>
+              </div>
+              <form onSubmit={handleSaveStripe}>
+                <div className="modal-body">
+                  {stripeMessage && (
+                    <div style={{ background: 'var(--success-light)', color: 'var(--success)', padding: '10px 14px', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
+                      {stripeMessage}
+                    </div>
+                  )}
+                  {stripeError && <div className="auth-error">{stripeError}</div>}
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                    Enter your Stripe API keys for this site. You can find these in your Stripe Dashboard under Developers &gt; API keys.
+                  </p>
+                  <div className="form-group">
+                    <label>Stripe Secret Key</label>
+                    <input
+                      type="password"
+                      value={stripeSecretKey}
+                      onChange={(e) => setStripeSecretKey(e.target.value)}
+                      placeholder="sk_live_..."
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Webhook Secret</label>
+                    <input
+                      type="password"
+                      value={stripeWebhookSecret}
+                      onChange={(e) => setStripeWebhookSecret(e.target.value)}
+                      placeholder="whsec_..."
+                    />
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                    Listen for <code>checkout.session.completed</code> and <code>charge.refunded</code> events.
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowStripeSettings(null)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={stripeSaving}>
+                    {stripeSaving ? 'Saving...' : 'Save Keys'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

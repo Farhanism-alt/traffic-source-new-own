@@ -118,6 +118,13 @@ const migrations = [
       CREATE INDEX idx_daily_stats_site_date ON daily_stats(site_id, date);
     `);
   },
+  // Migration 2: Per-site Stripe keys
+  (db) => {
+    db.exec(`
+      ALTER TABLE sites ADD COLUMN stripe_secret_key TEXT;
+      ALTER TABLE sites ADD COLUMN stripe_webhook_secret TEXT;
+    `);
+  },
 ];
 
 export function runMigrations(db) {

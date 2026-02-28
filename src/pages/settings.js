@@ -11,8 +11,6 @@ export default function Settings() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setError('');
@@ -59,26 +57,6 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div className="card-header">
-              <h3>Stripe Integration</h3>
-            </div>
-            <div className="card-body">
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Configure your Stripe webhook to receive conversion events.
-              </p>
-              <div className="form-group">
-                <label>Webhook URL</label>
-                <div className="snippet-block" style={{ fontSize: 13 }}>
-                  {appUrl}/api/stripe/webhook
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                Add this URL in your Stripe Dashboard under Developers &gt; Webhooks.
-                Listen for <code>checkout.session.completed</code> and <code>charge.refunded</code> events.
-              </p>
-            </div>
-          </div>
         </div>
       </DashboardLayout>
     </>

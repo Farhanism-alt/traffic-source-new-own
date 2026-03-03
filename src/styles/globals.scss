@@ -71,6 +71,11 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
   background: var(--bg);
 }
 
+.auth-logo {
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
 .auth-card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -156,6 +161,9 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 }
 
 .app-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-heading);
@@ -458,33 +466,77 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 .sites-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.site-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
+.site-card {
   background: var(--bg-card);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  padding: 16px 20px;
   cursor: pointer;
   transition: all 0.15s;
+  overflow: hidden;
 
   &:hover { border-color: rgba(255, 255, 255, 0.16); }
 
-  &-info { min-width: 160px; flex-shrink: 0; }
-  &-name { font-size: 15px; font-weight: 600; color: var(--text-heading); }
-  &-domain { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  &-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    gap: 16px;
+  }
+
+  &-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  &-favicon {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--bg-surface);
+  }
+
+  &-info { min-width: 0; }
+  &-name { font-size: 15px; font-weight: 600; color: var(--text-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  &-domain { font-size: 12px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  &-stats {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  &-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  &-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-heading);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+
+    &--secondary { font-size: 14px; color: var(--text-secondary); }
+  }
+
+  &-stat-label { font-size: 11px; color: var(--text-muted); }
 
   &-chart {
-    flex: 1;
     display: flex;
     align-items: flex-end;
     gap: 2px;
-    height: 40px;
-    min-width: 0;
+    height: 64px;
+    padding: 0 20px 16px;
   }
 
   &-bar-group {
@@ -499,34 +551,16 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
   &-bar {
     flex: 1;
     min-width: 1px;
-    border-radius: 1px 1px 0 0;
+    border-radius: 2px 2px 0 0;
     transition: height 0.2s;
 
-    &--pageviews { background: var(--text); opacity: 0.6; }
-    &--visitors { background: var(--text); opacity: 0.25; }
+    &--pageviews { background: var(--text); opacity: 0.5; }
+    &--visitors { background: var(--text); opacity: 0.2; }
   }
 
-  &-nodata { font-size: 12px; color: var(--text-muted); align-self: center; }
-
-  &-stats {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    min-width: 70px;
-    flex-shrink: 0;
-  }
-
-  &-count {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text-heading);
-
-    &--visitors { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
-  }
-
-  &-period { font-size: 11px; color: var(--text-muted); }
-  &-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  &-nodata { font-size: 12px; color: var(--text-muted); margin: auto; }
 }
+
 
 // ── Modal ──
 .modal-overlay {

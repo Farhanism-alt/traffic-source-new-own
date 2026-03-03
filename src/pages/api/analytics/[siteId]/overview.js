@@ -140,6 +140,16 @@ export default withAuth(function handler(req, res) {
     )
     .all(siteId, range.from, dateEnd);
 
+  const cities = db
+    .prepare(
+      `SELECT city as name, COUNT(*) as count
+       FROM sessions
+       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       AND city IS NOT NULL AND city != ''
+       GROUP BY city ORDER BY count DESC LIMIT 20`
+    )
+    .all(siteId, range.from, dateEnd);
+
   // --- Tech ---
   const browsers = db
     .prepare(
@@ -240,6 +250,7 @@ export default withAuth(function handler(req, res) {
     entryPages,
     exitPages,
     countries,
+    cities,
     browsers,
     os,
     devices,

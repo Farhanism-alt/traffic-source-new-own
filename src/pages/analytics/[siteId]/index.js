@@ -6,8 +6,9 @@ import AnalyticsPanel from '@/components/ui/AnalyticsPanel';
 import CombinedChart from '@/components/charts/CombinedChart';
 import RealtimeUsers from '@/components/ui/RealtimeUsers';
 import { useAnalytics } from '@/hooks/useAnalytics';
-import { getCountryName, getBrowserIcon, getOsIcon, getDeviceIcon, buildPageHref } from '@/lib/formatters';
+import { getCountryName, buildPageHref } from '@/lib/formatters';
 import CountryFlag from '@/components/ui/CountryFlag';
+import TechIcon from '@/components/ui/TechIcon';
 
 export default function Analytics() {
   const router = useRouter();
@@ -74,6 +75,7 @@ export default function Analytics() {
               utm_campaign: (data.sources || []).filter(s => s.name !== 'Direct'),
             }}
             valueKey="sessions"
+            showPercentage
             defaultTab="referrer"
           />
 
@@ -84,7 +86,7 @@ export default function Analytics() {
             ]}
             data={{
               country: data.countries || [],
-              city: data.countries || [],
+              city: data.cities || [],
             }}
             renderLabel={(row, meta) => {
               if (meta.activeTab === 'city') return row.name;
@@ -130,11 +132,12 @@ export default function Analytics() {
               os: data.os || [],
               device: data.devices || [],
             }}
-            renderLabel={(row, meta) => {
-              if (meta.activeTab === 'browser') return `${getBrowserIcon(row.name)} ${row.name}`;
-              if (meta.activeTab === 'os') return `${getOsIcon(row.name)} ${row.name}`;
-              return `${getDeviceIcon(row.name)} ${row.name}`;
-            }}
+            renderLabel={(row, meta) => (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <TechIcon type={meta.activeTab} name={row.name} />
+                {row.name}
+              </span>
+            )}
             showPercentage
             defaultTab="browser"
           />

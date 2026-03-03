@@ -23,7 +23,12 @@ export default function DashboardLayout({ children, siteId, siteName }) {
       <div className="app-layout">
         <header className="app-header">
           <div className="app-header-left">
-            <Link href="/sites" className="app-logo">Traffic Source</Link>
+            <Link href="/sites" className="app-logo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" d="M22 12A10 10 0 1 1 12 2m2.5.315c3.514.904 6.28 3.67 7.185 7.185" />
+              </svg>
+              Traffic Source
+            </Link>
             <nav className="app-nav">
               <Link href="/sites" className={`app-nav-link ${path === '/sites' ? 'active' : ''}`}>
                 Sites

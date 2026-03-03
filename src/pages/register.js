@@ -67,6 +67,11 @@ export default function Register() {
       </Head>
       <div className="auth-page">
         <div className="auth-card">
+          <div className="auth-logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" d="M22 12A10 10 0 1 1 12 2m2.5.315c3.514.904 6.28 3.67 7.185 7.185" />
+            </svg>
+          </div>
           <h1>Traffic Source</h1>
           <p className="auth-subtitle">Create your admin account</p>
           <form onSubmit={handleSubmit}>

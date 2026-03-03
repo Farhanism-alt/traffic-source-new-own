@@ -81,40 +81,55 @@ export default function Sites() {
               return (
                 <div
                   key={site.id}
-                  className="site-row"
+                  className="site-card"
                   onClick={() => router.push(`/analytics/${site.id}`)}
                 >
-                  <div className="site-row-info">
-                    <div className="site-row-name">{site.name}</div>
-                    <div className="site-row-domain">{site.domain}</div>
+                  <div className="site-card-header">
+                    <div className="site-card-meta">
+                      <img
+                        className="site-card-favicon"
+                        src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(site.domain)}`}
+                        alt=""
+                        width={24}
+                        height={24}
+                      />
+                      <div className="site-card-info">
+                        <div className="site-card-name">{site.name}</div>
+                        <div className="site-card-domain">{site.domain}</div>
+                      </div>
+                    </div>
+                    <div className="site-card-stats">
+                      <div className="site-card-stat">
+                        <span className="site-card-stat-value">{totalPageviews.toLocaleString()}</span>
+                        <span className="site-card-stat-label">pageviews</span>
+                      </div>
+                      <div className="site-card-stat">
+                        <span className="site-card-stat-value site-card-stat-value--secondary">{totalVisitors.toLocaleString()}</span>
+                        <span className="site-card-stat-label">visitors</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="site-row-chart">
+                  <div className="site-card-chart">
                     {site.hourly.length > 0 ? (
                       site.hourly.map((h, i) => (
                         <div
                           key={i}
-                          className="site-row-bar-group"
+                          className="site-card-bar-group"
                           title={`${h.hour}\n${h.pageviews} pageviews\n${h.visitors} visitors`}
                         >
                           <div
-                            className="site-row-bar site-row-bar--pageviews"
+                            className="site-card-bar site-card-bar--pageviews"
                             style={{ height: `${(h.pageviews / maxVal) * 100}%` }}
                           />
                           <div
-                            className="site-row-bar site-row-bar--visitors"
+                            className="site-card-bar site-card-bar--visitors"
                             style={{ height: `${(h.visitors / maxVal) * 100}%` }}
                           />
                         </div>
                       ))
                     ) : (
-                      <span className="site-row-nodata">No data</span>
+                      <span className="site-card-nodata">No data</span>
                     )}
-                  </div>
-                  <div className="site-row-stats">
-                    <span className="site-row-count">{totalPageviews.toLocaleString()}</span>
-                    <span className="site-row-period">pageviews</span>
-                    <span className="site-row-count site-row-count--visitors">{totalVisitors.toLocaleString()}</span>
-                    <span className="site-row-period">visitors</span>
                   </div>
                 </div>
               );

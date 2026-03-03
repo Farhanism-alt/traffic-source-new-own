@@ -1,5 +1,8 @@
 (function () {
   'use strict';
+  if (window.__ts_initialized) return;
+  window.__ts_initialized = true;
+
   var script = document.currentScript;
   var ENDPOINT = script.src.replace('/t.js', '/api/collect');
   var SITE_ID = script.getAttribute('data-site');

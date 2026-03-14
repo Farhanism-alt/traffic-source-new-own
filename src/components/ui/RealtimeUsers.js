@@ -3,6 +3,34 @@ import { useRouter } from 'next/router';
 import { getCountryName } from '@/lib/formatters';
 import CountryFlag from './CountryFlag';
 
+const BROWSER_ICONS = {
+  Chrome: 'chrome',
+  Firefox: 'firefox',
+  Safari: 'safari',
+  Edge: 'edge',
+  Opera: 'opera',
+  Samsung: 'samsung',
+  Brave: 'brave',
+};
+
+function BrowserIcon({ name }) {
+  const label = name || 'Unknown';
+  const key = Object.keys(BROWSER_ICONS).find((b) => label.includes(b));
+  if (key) {
+    return (
+      <img
+        className="realtime-browser-icon"
+        src={`https://cdn.jsdelivr.net/gh/nicedoc/browser-icons/icons/${BROWSER_ICONS[key]}.svg`}
+        alt={key}
+        title={label}
+        width={14}
+        height={14}
+      />
+    );
+  }
+  return <span className="realtime-browser-text" title={label}>{label}</span>;
+}
+
 export default function RealtimeUsers() {
   const [data, setData] = useState(null);
   const [expanded, setExpanded] = useState(false);
@@ -47,27 +75,19 @@ export default function RealtimeUsers() {
 
       {expanded && data.users.length > 0 && (
         <div className="realtime-widget-list">
-          <div className="realtime-widget-thead">
-            <span className="realtime-widget-th realtime-widget-th--location">Location</span>
-            <span className="realtime-widget-th realtime-widget-th--page">Page</span>
-            <span className="realtime-widget-th realtime-widget-th--source">Source</span>
-            <span className="realtime-widget-th realtime-widget-th--browser">Browser</span>
-          </div>
           {data.users.slice(0, 10).map((user) => (
             <div className="realtime-widget-row" key={user.visitor_id}>
-              <span className="realtime-widget-cell realtime-widget-cell--location">
+              <div className="realtime-row-top">
                 <CountryFlag code={user.country} size="s" />
-                {user.country ? getCountryName(user.country) : 'Unknown'}
-              </span>
-              <span className="realtime-widget-cell realtime-widget-cell--page" title={user.current_page || '/'}>
-                {user.current_page || '/'}
-              </span>
-              <span className="realtime-widget-cell realtime-widget-cell--source">
-                {user.source || 'Direct'}
-              </span>
-              <span className="realtime-widget-cell realtime-widget-cell--browser">
-                {user.browser || 'Unknown'}
-              </span>
+                <span className="realtime-country">
+                  {user.country ? getCountryName(user.country) : 'Unknown'}
+                </span>
+                <span className="realtime-page">{user.current_page || '/'}</span>
+              </div>
+              <div className="realtime-row-bottom">
+                <span className="realtime-source">{user.source || 'Direct'}</span>
+                <BrowserIcon name={user.browser} />
+              </div>
             </div>
           ))}
           {data.users.length > 10 && (

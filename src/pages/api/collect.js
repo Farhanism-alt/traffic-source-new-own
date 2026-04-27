@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 const UAParser = require('ua-parser-js');
+const geoip = require('geoip-lite');
 
 export const config = {
   api: {
@@ -24,6 +25,16 @@ export default function handler(req, res) {
       return res.status(400).end();
     }
 
+    // Heartbeat: only refresh last_activity, no new records
+    if (data.type === 'heartbeat') {
+      const db = getDb();
+      const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(data.site_id);
+      if (!site) return res.status(404).end();
+      db.prepare("UPDATE sessions SET last_activity = datetime('now') WHERE id = ? AND site_id = ?")
+        .run(data.session_id, data.site_id);
+      return res.status(200).end();
+    }
+
     const db = getDb();
 
     const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(data.site_id);
@@ -36,9 +47,25 @@ export default function handler(req, res) {
     const os = ua.getOS();
     const device = ua.getDevice();
 
-    const country = req.headers['cf-ipcountry'] || null;
-    const city = req.headers['cf-ipcity'] || null;
-    const continent = req.headers['cf-ipcontinent'] || null;
+    let country = req.headers['cf-ipcountry'] || null;
+    let city = req.headers['cf-ipcity'] || null;
+    let continent = req.headers['cf-ipcontinent'] || null;
+
+    // Fall back to geoip-lite when not behind Cloudflare
+    if (!country) {
+      const rawIp = req.headers['cf-connecting-ip']
+        || req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+        || req.socket?.remoteAddress
+        || null;
+      const ip = rawIp === '::1' || rawIp === '127.0.0.1' ? null : rawIp;
+      if (ip) {
+        const geo = geoip.lookup(ip);
+        if (geo) {
+          country = geo.country || null;
+          city = geo.city || null;
+        }
+      }
+    }
 
     let referrerDomain = null;
     if (data.referrer) {

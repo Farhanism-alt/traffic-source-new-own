@@ -85,6 +85,9 @@
   // Track initial page view
   send({ type: 'pageview' });
 
+  // Heartbeat every 2 minutes so live-visitor count stays accurate
+  setInterval(function () { send({ type: 'heartbeat' }); }, 2 * 60 * 1000);
+
   // SPA support — only fire when URL actually changes
   var lastUrl = location.href;
   var pushState = history.pushState;

@@ -11,9 +11,32 @@ export async function register() {
           console.log(`[Stripe Sync] ${result.conversions} new conversions, ${result.refunds} refunds across ${result.sites} sites`);
         }
       } catch (err) {
-        // Don't crash the server — just log and retry next interval
         if (!err.message?.includes('no such table')) {
           console.error('[Stripe Sync] Error:', err.message);
+        }
+      }
+
+      try {
+        const { syncDodoPayments } = await import('./src/lib/dodo-sync.js');
+        const result = await syncDodoPayments();
+        if (result.conversions > 0 || result.refunds > 0) {
+          console.log(`[Dodo Sync] ${result.conversions} new conversions, ${result.refunds} refunds across ${result.sites} sites`);
+        }
+      } catch (err) {
+        if (!err.message?.includes('no such table')) {
+          console.error('[Dodo Sync] Error:', err.message);
+        }
+      }
+
+      try {
+        const { syncLemonSqueezyPayments } = await import('./src/lib/lemonsqueezy-sync.js');
+        const result = await syncLemonSqueezyPayments();
+        if (result.conversions > 0 || result.refunds > 0) {
+          console.log(`[LemonSqueezy Sync] ${result.conversions} new conversions, ${result.refunds} refunds across ${result.sites} sites`);
+        }
+      } catch (err) {
+        if (!err.message?.includes('no such table')) {
+          console.error('[LemonSqueezy Sync] Error:', err.message);
         }
       }
     };

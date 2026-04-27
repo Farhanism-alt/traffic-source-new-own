@@ -345,6 +345,14 @@ const migrations = [
       CREATE UNIQUE INDEX idx_sites_public_slug ON sites(public_slug);
     `);
   },
+  // Migration 12: Dodo Payments and LemonSqueezy integrations
+  (db) => {
+    db.exec(`
+      ALTER TABLE sites ADD COLUMN dodo_api_key TEXT;
+      ALTER TABLE sites ADD COLUMN lemonsqueezy_api_key TEXT;
+      ALTER TABLE conversions ADD COLUMN payment_provider TEXT DEFAULT 'stripe';
+    `);
+  },
 ];
 
 export function runMigrations(db) {

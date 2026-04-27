@@ -17,6 +17,8 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
     "cookie": "^1.1.1",
+    "dodopayments": "^2.28.2",
+    "geoip-lite": "^1.4.10",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "next": "16.1.6",

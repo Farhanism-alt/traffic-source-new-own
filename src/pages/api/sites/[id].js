@@ -21,11 +21,17 @@ export default withAuth(function handler(req, res) {
     if (maskedSite.stripe_webhook_secret) {
       maskedSite.stripe_webhook_secret = '••••' + maskedSite.stripe_webhook_secret.slice(-4);
     }
+    if (maskedSite.dodo_api_key) {
+      maskedSite.dodo_api_key = '••••' + maskedSite.dodo_api_key.slice(-4);
+    }
+    if (maskedSite.lemonsqueezy_api_key) {
+      maskedSite.lemonsqueezy_api_key = '••••' + maskedSite.lemonsqueezy_api_key.slice(-4);
+    }
     return res.status(200).json({ site: maskedSite });
   }
 
   if (req.method === 'PUT') {
-    const { domain, name, stripe_secret_key, is_public, public_slug } = req.body;
+    const { domain, name, stripe_secret_key, dodo_api_key, lemonsqueezy_api_key, is_public, public_slug } = req.body;
     const cleanDomain = domain
       ? domain.replace(/^https?:\/\//, '').replace(/\/+$/, '')
       : site.domain;
@@ -39,6 +45,20 @@ export default withAuth(function handler(req, res) {
     if (stripe_secret_key !== undefined) {
       db.prepare('UPDATE sites SET stripe_secret_key = ? WHERE id = ?').run(
         stripe_secret_key || null,
+        id
+      );
+    }
+
+    if (dodo_api_key !== undefined) {
+      db.prepare('UPDATE sites SET dodo_api_key = ? WHERE id = ?').run(
+        dodo_api_key || null,
+        id
+      );
+    }
+
+    if (lemonsqueezy_api_key !== undefined) {
+      db.prepare('UPDATE sites SET lemonsqueezy_api_key = ? WHERE id = ?').run(
+        lemonsqueezy_api_key || null,
         id
       );
     }
@@ -76,6 +96,12 @@ export default withAuth(function handler(req, res) {
     }
     if (maskedUpdated.stripe_webhook_secret) {
       maskedUpdated.stripe_webhook_secret = '••••' + maskedUpdated.stripe_webhook_secret.slice(-4);
+    }
+    if (maskedUpdated.dodo_api_key) {
+      maskedUpdated.dodo_api_key = '••••' + maskedUpdated.dodo_api_key.slice(-4);
+    }
+    if (maskedUpdated.lemonsqueezy_api_key) {
+      maskedUpdated.lemonsqueezy_api_key = '••••' + maskedUpdated.lemonsqueezy_api_key.slice(-4);
     }
     return res.status(200).json({ site: maskedUpdated });
   }

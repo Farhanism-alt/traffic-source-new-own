@@ -60,6 +60,14 @@ export default function SiteSettings() {
   const [stripeSaving, setStripeSaving] = useState(false);
   const [stripeMessage, setStripeMessage] = useState('');
   const [stripeError, setStripeError] = useState('');
+  const [dodoApiKey, setDodoApiKey] = useState('');
+  const [dodoSaving, setDodoSaving] = useState(false);
+  const [dodoMessage, setDodoMessage] = useState('');
+  const [dodoError, setDodoError] = useState('');
+  const [lsApiKey, setLsApiKey] = useState('');
+  const [lsSaving, setLsSaving] = useState(false);
+  const [lsMessage, setLsMessage] = useState('');
+  const [lsError, setLsError] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [publicSlug, setPublicSlug] = useState('');
   const [shareSaving, setShareSaving] = useState(false);
@@ -79,6 +87,8 @@ export default function SiteSettings() {
           const data = await siteRes.json();
           setSite(data.site);
           setStripeSecretKey(data.site.stripe_secret_key || '');
+          setDodoApiKey(data.site.dodo_api_key || '');
+          setLsApiKey(data.site.lemonsqueezy_api_key || '');
           setIsPublic(!!data.site.is_public);
           setPublicSlug(data.site.public_slug || '');
         }
@@ -118,6 +128,66 @@ export default function SiteSettings() {
       setStripeError(err.message);
     } finally {
       setStripeSaving(false);
+    }
+  };
+
+  const handleSaveDodo = async (e) => {
+    e.preventDefault();
+    setDodoSaving(true);
+    setDodoMessage('');
+    setDodoError('');
+    try {
+      const body = {};
+      if (dodoApiKey && !dodoApiKey.startsWith('••••')) {
+        body.dodo_api_key = dodoApiKey;
+      }
+      if (Object.keys(body).length === 0) {
+        setDodoMessage('No changes to save');
+        return;
+      }
+      const res = await fetch(`/api/sites/${siteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDodoApiKey(data.site.dodo_api_key || '');
+      setDodoMessage('Dodo Payments key saved');
+    } catch (err) {
+      setDodoError(err.message);
+    } finally {
+      setDodoSaving(false);
+    }
+  };
+
+  const handleSaveLemonSqueezy = async (e) => {
+    e.preventDefault();
+    setLsSaving(true);
+    setLsMessage('');
+    setLsError('');
+    try {
+      const body = {};
+      if (lsApiKey && !lsApiKey.startsWith('••••')) {
+        body.lemonsqueezy_api_key = lsApiKey;
+      }
+      if (Object.keys(body).length === 0) {
+        setLsMessage('No changes to save');
+        return;
+      }
+      const res = await fetch(`/api/sites/${siteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setLsApiKey(data.site.lemonsqueezy_api_key || '');
+      setLsMessage('Lemon Squeezy key saved');
+    } catch (err) {
+      setLsError(err.message);
+    } finally {
+      setLsSaving(false);
     }
   };
 
@@ -271,6 +341,106 @@ export default function SiteSettings() {
               </div>
               <button type="submit" className="btn btn-primary" disabled={stripeSaving} style={{ alignSelf: 'flex-start' }}>
                 {stripeSaving ? 'Saving...' : 'Save Key'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* ── Dodo Payments Settings ── */}
+        <div className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-header">
+            <div className="panel-tabs">
+              <button className="panel-tab active">Dodo Payments</button>
+            </div>
+          </div>
+          <div className="panel-body" style={{ padding: 20 }}>
+            {dodoMessage && (
+              <div style={{ background: 'var(--success-light)', color: 'var(--success)', padding: '10px 14px', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
+                {dodoMessage}
+              </div>
+            )}
+            {dodoError && <div className="auth-error">{dodoError}</div>}
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Enter your Dodo Payments API key. You can find it in your Dodo Dashboard under Developers &gt; API keys.
+              Traffic Source will automatically sync your payments &mdash; no webhook setup required.
+            </p>
+            {snippetData?.dodoSnippet && (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  Pass tracking data when creating a payment link:
+                </p>
+                <CodeBlock
+                  code={snippetData.dodoSnippet}
+                  onCopy={() => copyToClipboard(snippetData.dodoSnippet)}
+                  highlightPatterns={['metadata', 'ts_visitor_id', 'ts_session_id']}
+                />
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 16 }}>
+                  Traffic Source will automatically sync payments from Dodo. No webhook setup needed.
+                </p>
+              </>
+            )}
+            <form onSubmit={handleSaveDodo} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="form-group">
+                <label>Dodo Payments API Key</label>
+                <input
+                  type="password"
+                  value={dodoApiKey}
+                  onChange={(e) => setDodoApiKey(e.target.value)}
+                  placeholder="dodo_sk_live_..."
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={dodoSaving} style={{ alignSelf: 'flex-start' }}>
+                {dodoSaving ? 'Saving...' : 'Save Key'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* ── Lemon Squeezy Settings ── */}
+        <div className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-header">
+            <div className="panel-tabs">
+              <button className="panel-tab active">Lemon Squeezy</button>
+            </div>
+          </div>
+          <div className="panel-body" style={{ padding: 20 }}>
+            {lsMessage && (
+              <div style={{ background: 'var(--success-light)', color: 'var(--success)', padding: '10px 14px', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
+                {lsMessage}
+              </div>
+            )}
+            {lsError && <div className="auth-error">{lsError}</div>}
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Enter your Lemon Squeezy API key. You can find it in your Lemon Squeezy Dashboard under Settings &gt; API.
+              Traffic Source will automatically sync your orders &mdash; no webhook setup required.
+            </p>
+            {snippetData?.lemonSqueezySnippet && (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  Pass tracking data via checkout URL parameters:
+                </p>
+                <CodeBlock
+                  code={snippetData.lemonSqueezySnippet}
+                  onCopy={() => copyToClipboard(snippetData.lemonSqueezySnippet)}
+                  highlightPatterns={['checkout_data', 'custom', 'ts_visitor_id', 'ts_session_id']}
+                />
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 16 }}>
+                  Traffic Source will automatically sync orders from Lemon Squeezy. No webhook setup needed.
+                </p>
+              </>
+            )}
+            <form onSubmit={handleSaveLemonSqueezy} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="form-group">
+                <label>Lemon Squeezy API Key</label>
+                <input
+                  type="password"
+                  value={lsApiKey}
+                  onChange={(e) => setLsApiKey(e.target.value)}
+                  placeholder="eyJ..."
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={lsSaving} style={{ alignSelf: 'flex-start' }}>
+                {lsSaving ? 'Saving...' : 'Save Key'}
               </button>
             </form>
           </div>

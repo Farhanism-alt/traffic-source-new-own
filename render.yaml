@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: traffic-source
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/analytics.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

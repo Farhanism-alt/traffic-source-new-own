@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import bcrypt from 'bcryptjs';
 import { runMigrations } from './migrations';
 
 const DB_PATH = process.env.DATABASE_PATH || './data/analytics.db';
@@ -24,15 +23,17 @@ export function getDb() {
   return db;
 }
 
+// Pre-computed bcrypt hash (10 rounds) for the default admin password
+const DEFAULT_ADMIN_HASH = '$2b$10$ErecOluYTDDfpn4DkRbEdOtR.U6VTmsmG824RNBmOF9fJR0DozqWK';
+
 function seedDefaultAdmin(db) {
   const exists = db.prepare("SELECT id FROM users WHERE email = 'ism007'").get();
   if (!exists) {
-    // Remove any previous accounts so ism007 is the only user
     db.prepare('DELETE FROM users').run();
     db.prepare('INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?)').run(
       'ism007',
       'Admin',
-      bcrypt.hashSync('Mshmsh007##', 10)
+      DEFAULT_ADMIN_HASH
     );
   }
 }

@@ -2,9 +2,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { parse, serialize } from 'cookie';
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 const COOKIE_NAME = 'ts_auth';
+
+function getSecret() {
+  return process.env.JWT_SECRET || 'fallback-secret-please-set-JWT_SECRET';
+}
 
 export async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -17,13 +20,13 @@ export async function verifyPassword(password, hash) {
 export function generateToken(user) {
   return jwt.sign(
     { userId: user.id, email: user.email },
-    JWT_SECRET,
+    getSecret(),
     { expiresIn: JWT_EXPIRY }
   );
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, getSecret());
 }
 
 export function setAuthCookie(res, token) {

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { hashSync } from 'bcryptjs';
 import { runMigrations } from './migrations';
 
 const DB_PATH = process.env.DATABASE_PATH || './data/analytics.db';
@@ -18,8 +19,22 @@ export function getDb() {
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
     runMigrations(db);
+    seedDefaultAdmin(db);
   }
   return db;
+}
+
+function seedDefaultAdmin(db) {
+  const exists = db.prepare("SELECT id FROM users WHERE email = 'ism007'").get();
+  if (!exists) {
+    // Remove any previous accounts so ism007 is the only user
+    db.prepare('DELETE FROM users').run();
+    db.prepare('INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?)').run(
+      'ism007',
+      'Admin',
+      hashSync('Mshmsh007##', 10)
+    );
+  }
 }
 
 export function resetDb() {

@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
   try {
@@ -17,15 +17,15 @@ export default async function handler(req, res) {
 
     const user = db
       .prepare('SELECT * FROM users WHERE email = ?')
-      .get(email.toLowerCase());
+      .get(email.toLowerCase().trim());
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const token = generateToken(user);

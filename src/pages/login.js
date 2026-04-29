@@ -41,13 +41,13 @@ export default function Login() {
           <form onSubmit={handleSubmit}>
             {error && <div className="auth-error">{error}</div>}
             <div className="form-group">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">Username</label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="Your username"
                 required
               />
             </div>

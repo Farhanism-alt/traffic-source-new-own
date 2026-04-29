@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { hashSync } from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { runMigrations } from './migrations';
 
 const DB_PATH = process.env.DATABASE_PATH || './data/analytics.db';
@@ -32,7 +32,7 @@ function seedDefaultAdmin(db) {
     db.prepare('INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?)').run(
       'ism007',
       'Admin',
-      hashSync('Mshmsh007##', 10)
+      bcrypt.hashSync('Mshmsh007##', 10)
     );
   }
 }

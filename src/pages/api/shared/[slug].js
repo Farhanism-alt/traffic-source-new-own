@@ -1,17 +1,17 @@
-import { getDb } from '@/lib/db';
+import { getRow, getRows } from '@/lib/db';
 import { parseDateRange } from '@/lib/analytics';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { slug } = req.query;
-  const db = getDb();
 
-  const site = db
-    .prepare('SELECT * FROM sites WHERE public_slug = ? AND is_public = 1')
-    .get(slug);
+  const site = await getRow(
+    'SELECT * FROM sites WHERE public_slug = ? AND is_public = true',
+    [slug]
+  );
 
   if (!site) {
     return res.status(404).json({ error: 'Not found' });
@@ -32,8 +32,8 @@ export default function handler(req, res) {
     to: new Date(fromDate.getTime() - 86400000).toISOString().slice(0, 10),
   };
 
-  const current = db
-    .prepare(
+  const [current, previous] = await Promise.all([
+    getRow(
       `SELECT
         COALESCE(SUM(visitors), 0) as total_visitors,
         COALESCE(SUM(sessions), 0) as total_sessions,
@@ -41,12 +41,10 @@ export default function handler(req, res) {
         COALESCE(SUM(bounces), 0) as total_bounces,
         COALESCE(AVG(avg_duration), 0) as avg_duration
        FROM daily_stats
-       WHERE site_id = ? AND date BETWEEN ? AND ?`
-    )
-    .get(siteId, range.from, range.to);
-
-  const previous = db
-    .prepare(
+       WHERE site_id = ? AND date BETWEEN ? AND ?`,
+      [siteId, range.from, range.to]
+    ),
+    getRow(
       `SELECT
         COALESCE(SUM(visitors), 0) as total_visitors,
         COALESCE(SUM(sessions), 0) as total_sessions,
@@ -54,105 +52,92 @@ export default function handler(req, res) {
         COALESCE(SUM(bounces), 0) as total_bounces,
         COALESCE(AVG(avg_duration), 0) as avg_duration
        FROM daily_stats
-       WHERE site_id = ? AND date BETWEEN ? AND ?`
-    )
-    .get(siteId, prevRange.from, prevRange.to);
+       WHERE site_id = ? AND date BETWEEN ? AND ?`,
+      [siteId, prevRange.from, prevRange.to]
+    ),
+  ]);
 
-  const bounceRate = current.total_sessions > 0
-    ? ((current.total_bounces / current.total_sessions) * 100).toFixed(1)
-    : 0;
-  const prevBounceRate = previous.total_sessions > 0
-    ? ((previous.total_bounces / previous.total_sessions) * 100).toFixed(1)
-    : 0;
+  const bounceRate =
+    current.total_sessions > 0
+      ? ((current.total_bounces / current.total_sessions) * 100).toFixed(1)
+      : 0;
+  const prevBounceRate =
+    previous.total_sessions > 0
+      ? ((previous.total_bounces / previous.total_sessions) * 100).toFixed(1)
+      : 0;
 
   // Time series
-  let timeSeries;
+  let timeSeriesPromise;
   if (req.query.period === '24h') {
-    timeSeries = db
-      .prepare(
-        `SELECT strftime('%Y-%m-%d %H:00', timestamp) as date,
-                COUNT(*) as page_views,
-                COUNT(DISTINCT visitor_id) as visitors
-         FROM page_views
-         WHERE site_id = ? AND timestamp >= datetime('now', '-24 hours')
-         GROUP BY date ORDER BY date ASC`
-      )
-      .all(siteId);
+    timeSeriesPromise = getRows(
+      `SELECT TO_CHAR(timestamp AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24":00"') as date,
+              COUNT(*) as page_views,
+              COUNT(DISTINCT visitor_id) as visitors
+       FROM page_views
+       WHERE site_id = ? AND timestamp >= NOW() - INTERVAL '24 hours'
+       GROUP BY date ORDER BY date ASC`,
+      [siteId]
+    );
   } else {
-    timeSeries = db
-      .prepare(
-        `SELECT date, visitors, sessions, page_views
-         FROM daily_stats
-         WHERE site_id = ? AND date BETWEEN ? AND ?
-         ORDER BY date ASC`
-      )
-      .all(siteId, range.from, range.to);
+    timeSeriesPromise = getRows(
+      `SELECT date, visitors, sessions, page_views
+       FROM daily_stats
+       WHERE site_id = ? AND date BETWEEN ? AND ?
+       ORDER BY date ASC`,
+      [siteId, range.from, range.to]
+    );
   }
 
-  // Sources
-  const sources = db
-    .prepare(
+  const [timeSeries, sources, pages, countries, browsers, os, devices] = await Promise.all([
+    timeSeriesPromise,
+    getRows(
       `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
         COUNT(*) as sessions, COUNT(DISTINCT visitor_id) as visitors
        FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
-       GROUP BY name ORDER BY sessions DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // Pages
-  const pages = db
-    .prepare(
+       WHERE site_id = ? AND started_at BETWEEN ? AND ?
+       GROUP BY name ORDER BY sessions DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+    getRows(
       `SELECT pathname as name, COUNT(*) as views
        FROM page_views
-       WHERE site_id = ? AND datetime(timestamp) BETWEEN ? AND ?
-       GROUP BY pathname ORDER BY views DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // Countries
-  const countries = db
-    .prepare(
+       WHERE site_id = ? AND timestamp BETWEEN ? AND ?
+       GROUP BY pathname ORDER BY views DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+    getRows(
       `SELECT country as name, COUNT(*) as count
        FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       WHERE site_id = ? AND started_at BETWEEN ? AND ?
        AND country IS NOT NULL AND country != ''
-       GROUP BY country ORDER BY count DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // Browsers
-  const browsers = db
-    .prepare(
+       GROUP BY country ORDER BY count DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+    getRows(
       `SELECT browser as name, COUNT(*) as count
        FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       WHERE site_id = ? AND started_at BETWEEN ? AND ?
        AND browser IS NOT NULL AND browser != ''
-       GROUP BY browser ORDER BY count DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // OS
-  const os = db
-    .prepare(
+       GROUP BY browser ORDER BY count DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+    getRows(
       `SELECT os as name, COUNT(*) as count
        FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       WHERE site_id = ? AND started_at BETWEEN ? AND ?
        AND os IS NOT NULL AND os != ''
-       GROUP BY os ORDER BY count DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // Devices
-  const devices = db
-    .prepare(
+       GROUP BY os ORDER BY count DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+    getRows(
       `SELECT device_type as name, COUNT(*) as count
        FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       WHERE site_id = ? AND started_at BETWEEN ? AND ?
        AND device_type IS NOT NULL AND device_type != ''
-       GROUP BY device_type ORDER BY count DESC LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd);
+       GROUP BY device_type ORDER BY count DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    ),
+  ]);
 
   function pctChange(curr, prev) {
     if (prev === 0) return curr > 0 ? 100 : 0;

@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { query, getRow, run } from '@/lib/db';
 import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth';
 
 export default async function handler(req, res) {
@@ -22,27 +22,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const db = getDb();
-
-    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-    if (userCount.count > 0) {
+    const countRow = await getRow('SELECT COUNT(*)::int as count FROM users');
+    if (countRow && countRow.count > 0) {
       return res.status(403).json({ error: 'Registration is disabled. An account already exists.' });
     }
 
-    const existing = db
-      .prepare('SELECT id FROM users WHERE email = ?')
-      .get(email.toLowerCase());
+    const existing = await getRow('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
     const passwordHash = await hashPassword(password);
 
-    const result = db
-      .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-      .run(email.toLowerCase(), passwordHash, name || null);
+    const result = await run(
+      'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?) RETURNING id',
+      [email.toLowerCase(), passwordHash, name || null]
+    );
+    const newId = result.rows[0].id;
 
-    const user = { id: result.lastInsertRowid, email: email.toLowerCase(), name };
+    const user = { id: newId, email: email.toLowerCase(), name };
     const token = generateToken(user);
     setAuthCookie(res, token);
 

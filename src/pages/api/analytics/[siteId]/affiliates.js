@@ -1,23 +1,22 @@
-import { getDb } from '@/lib/db';
+import { getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { siteId } = req.query;
-  const site = verifySiteOwnership(siteId, req.user.userId);
+  const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const db = getDb();
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';
 
   // All affiliates with stats for the date range
-  const affiliates = db
-    .prepare(
+  const [affiliates, timeSeries] = await Promise.all([
+    getRows(
       `SELECT a.id, a.name, a.slug, a.commission_rate, a.created_at,
         COALESCE(v.visits, 0) as visits,
         COALESCE(v.unique_visitors, 0) as unique_visitors,
@@ -29,7 +28,7 @@ export default withAuth(function handler(req, res) {
            COUNT(*) as visits,
            COUNT(DISTINCT visitor_id) as unique_visitors
          FROM affiliate_visits
-         WHERE site_id = ? AND datetime(landed_at) BETWEEN ? AND ?
+         WHERE site_id = ? AND landed_at BETWEEN ? AND ?
          GROUP BY affiliate_id
        ) v ON v.affiliate_id = a.id
        LEFT JOIN (
@@ -38,13 +37,23 @@ export default withAuth(function handler(req, res) {
            SUM(amount) as revenue
          FROM conversions
          WHERE site_id = ? AND status = 'completed'
-           AND datetime(created_at) BETWEEN ? AND ?
+           AND created_at BETWEEN ? AND ?
          GROUP BY affiliate_id
        ) c ON c.affiliate_id = a.id
        WHERE a.site_id = ?
-       ORDER BY COALESCE(c.revenue, 0) DESC, COALESCE(v.visits, 0) DESC`
-    )
-    .all(siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId);
+       ORDER BY COALESCE(c.revenue, 0) DESC, COALESCE(v.visits, 0) DESC`,
+      [siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId]
+    ),
+    getRows(
+      `SELECT DATE(landed_at) as date,
+        COUNT(*) as visits,
+        COUNT(DISTINCT visitor_id) as unique_visitors
+       FROM affiliate_visits
+       WHERE site_id = ? AND landed_at BETWEEN ? AND ?
+       GROUP BY date ORDER BY date ASC`,
+      [siteId, range.from, dateEnd]
+    ),
+  ]);
 
   // Totals
   const totals = affiliates.reduce(
@@ -56,18 +65,6 @@ export default withAuth(function handler(req, res) {
     }),
     { visits: 0, unique_visitors: 0, conversions: 0, revenue: 0 }
   );
-
-  // Time series for affiliate visits
-  const timeSeries = db
-    .prepare(
-      `SELECT date(landed_at) as date,
-        COUNT(*) as visits,
-        COUNT(DISTINCT visitor_id) as unique_visitors
-       FROM affiliate_visits
-       WHERE site_id = ? AND datetime(landed_at) BETWEEN ? AND ?
-       GROUP BY date ORDER BY date ASC`
-    )
-    .all(siteId, range.from, dateEnd);
 
   res.status(200).json({ site, affiliates, totals, timeSeries });
 });

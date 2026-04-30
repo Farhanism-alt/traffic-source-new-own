@@ -1,9 +1,9 @@
 import { withAuth } from '@/lib/withAuth';
 import { getGscCredentials, saveGscCredentials, clearGscCredentials, getRedirectUri } from '@/lib/gsc';
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method === 'GET') {
-    const { clientId, clientSecret } = getGscCredentials();
+    const { clientId, clientSecret } = await getGscCredentials();
     return res.status(200).json({
       configured: !!(clientId && clientSecret),
       clientIdMasked: clientId ? clientId.slice(0, 12) + '…' + clientId.slice(-6) : null,
@@ -17,12 +17,12 @@ export default withAuth(function handler(req, res) {
     if (!clientId || !clientSecret) {
       return res.status(400).json({ error: 'clientId and clientSecret are required' });
     }
-    saveGscCredentials({ clientId: clientId.trim(), clientSecret: clientSecret.trim() });
+    await saveGscCredentials({ clientId: clientId.trim(), clientSecret: clientSecret.trim() });
     return res.status(200).json({ ok: true });
   }
 
   if (req.method === 'DELETE') {
-    clearGscCredentials();
+    await clearGscCredentials();
     return res.status(200).json({ ok: true });
   }
 

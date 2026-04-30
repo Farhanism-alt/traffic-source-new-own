@@ -1,6 +1,6 @@
-import { getDb } from '@/lib/db';
+import { getRow, getRows, run } from '@/lib/db';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -11,53 +11,53 @@ export default function handler(req, res) {
   }
 
   try {
-    const db = getDb();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const date = yesterday.toISOString().slice(0, 10);
 
     // Get all sites
-    const sites = db.prepare('SELECT id FROM sites').all();
+    const sites = await getRows('SELECT id FROM sites');
 
     for (const site of sites) {
       // Ensure daily_stats row exists
-      db.prepare(
-        `INSERT OR IGNORE INTO daily_stats (site_id, date) VALUES (?, ?)`
-      ).run(site.id, date);
+      await run(
+        `INSERT INTO daily_stats (site_id, date) VALUES (?, ?) ON CONFLICT (site_id, date) DO NOTHING`,
+        [site.id, date]
+      );
 
       // Recompute stats from raw data
-      const stats = db
-        .prepare(
+      const [stats, pageViews] = await Promise.all([
+        getRow(
           `SELECT
             COUNT(DISTINCT visitor_id) as visitors,
             COUNT(*) as sessions,
-            SUM(is_bounce) as bounces,
+            SUM(is_bounce::int) as bounces,
             AVG(duration) as avg_duration
            FROM sessions
-           WHERE site_id = ? AND date(started_at) = ?`
-        )
-        .get(site.id, date);
-
-      const pageViews = db
-        .prepare(
+           WHERE site_id = ? AND DATE(started_at) = ?`,
+          [site.id, date]
+        ),
+        getRow(
           `SELECT COUNT(*) as count FROM page_views
-           WHERE site_id = ? AND date(timestamp) = ?`
-        )
-        .get(site.id, date);
+           WHERE site_id = ? AND DATE(timestamp) = ?`,
+          [site.id, date]
+        ),
+      ]);
 
-      db.prepare(
+      await run(
         `UPDATE daily_stats SET
           visitors = ?, sessions = ?, page_views = ?,
           bounces = ?, avg_duration = ?
-         WHERE site_id = ? AND date = ?`
-      ).run(
-        stats.visitors || 0,
-        stats.sessions || 0,
-        pageViews.count || 0,
-        stats.bounces || 0,
-        stats.avg_duration || 0,
-        site.id,
-        date
+         WHERE site_id = ? AND date = ?`,
+        [
+          stats.visitors || 0,
+          stats.sessions || 0,
+          pageViews.count || 0,
+          stats.bounces || 0,
+          stats.avg_duration || 0,
+          site.id,
+          date,
+        ]
       );
     }
 

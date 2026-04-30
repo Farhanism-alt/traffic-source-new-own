@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getRow, getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 
@@ -64,16 +64,15 @@ function hasSessionFilters(query) {
     query.exit_page || query.browser || query.os || query.device;
 }
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { siteId } = req.query;
-  const site = verifySiteOwnership(siteId, req.user.userId);
+  const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const db = getDb();
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';
 
@@ -101,43 +100,41 @@ export default withAuth(function handler(req, res) {
   // Current period totals — when filters are active, compute from sessions table
   let current, previous;
   if (useSessionFilters || usePageFilter) {
-    // Build from sessions + page_views with filters
     const sessionJoinPv = usePageFilter
       ? `INNER JOIN page_views pv ON pv.site_id = s.site_id AND pv.session_id = s.id`
       : '';
     const pvFilterClause = usePageFilter ? ` AND pv.pathname = ?` : '';
     const pvParams = usePageFilter ? [req.query.page] : [];
 
-    current = db
-      .prepare(
+    [current, previous] = await Promise.all([
+      getRow(
         `SELECT
           COUNT(DISTINCT s.visitor_id) as total_visitors,
           COUNT(DISTINCT s.id) as total_sessions,
           COALESCE(SUM(s.page_count), 0) as total_page_views,
-          COALESCE(SUM(s.is_bounce), 0) as total_bounces,
+          COALESCE(SUM(s.is_bounce::int), 0) as total_bounces,
           COALESCE(AVG(s.duration), 0) as avg_duration
          FROM sessions s
          ${sessionJoinPv}
-         WHERE s.site_id = ? AND datetime(s.started_at) BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`
-      )
-      .get(siteId, range.from, dateEnd, ...sfAliased.params, ...pvParams);
-
-    previous = db
-      .prepare(
+         WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`,
+        [siteId, range.from, dateEnd, ...sfAliased.params, ...pvParams]
+      ),
+      getRow(
         `SELECT
           COUNT(DISTINCT s.visitor_id) as total_visitors,
           COUNT(DISTINCT s.id) as total_sessions,
           COALESCE(SUM(s.page_count), 0) as total_page_views,
-          COALESCE(SUM(s.is_bounce), 0) as total_bounces,
+          COALESCE(SUM(s.is_bounce::int), 0) as total_bounces,
           COALESCE(AVG(s.duration), 0) as avg_duration
          FROM sessions s
          ${sessionJoinPv}
-         WHERE s.site_id = ? AND datetime(s.started_at) BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`
-      )
-      .get(siteId, prevRange.from, prevRange.to + ' 23:59:59', ...sfAliased.params, ...pvParams);
+         WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`,
+        [siteId, prevRange.from, prevRange.to + ' 23:59:59', ...sfAliased.params, ...pvParams]
+      ),
+    ]);
   } else {
-    current = db
-      .prepare(
+    [current, previous] = await Promise.all([
+      getRow(
         `SELECT
           COALESCE(SUM(visitors), 0) as total_visitors,
           COALESCE(SUM(sessions), 0) as total_sessions,
@@ -145,12 +142,10 @@ export default withAuth(function handler(req, res) {
           COALESCE(SUM(bounces), 0) as total_bounces,
           COALESCE(AVG(avg_duration), 0) as avg_duration
          FROM daily_stats
-         WHERE site_id = ? AND date BETWEEN ? AND ?`
-      )
-      .get(siteId, range.from, range.to);
-
-    previous = db
-      .prepare(
+         WHERE site_id = ? AND date BETWEEN ? AND ?`,
+        [siteId, range.from, range.to]
+      ),
+      getRow(
         `SELECT
           COALESCE(SUM(visitors), 0) as total_visitors,
           COALESCE(SUM(sessions), 0) as total_sessions,
@@ -158,9 +153,10 @@ export default withAuth(function handler(req, res) {
           COALESCE(SUM(bounces), 0) as total_bounces,
           COALESCE(AVG(avg_duration), 0) as avg_duration
          FROM daily_stats
-         WHERE site_id = ? AND date BETWEEN ? AND ?`
-      )
-      .get(siteId, prevRange.from, prevRange.to);
+         WHERE site_id = ? AND date BETWEEN ? AND ?`,
+        [siteId, prevRange.from, prevRange.to]
+      ),
+    ]);
   }
 
   const bounceRate =
@@ -172,8 +168,16 @@ export default withAuth(function handler(req, res) {
       ? ((previous.total_bounces / previous.total_sessions) * 100).toFixed(1)
       : 0;
 
+  // Helper: apply session filters to a sessions-based query (returns Promise)
+  const sessQ = (baseWhere, baseParams, select, groupOrder) => {
+    return getRows(
+      `${select} FROM sessions WHERE ${baseWhere}${sfWhere} ${groupOrder}`,
+      [...baseParams, ...sf.params]
+    );
+  };
+
   // Time series — when filters active, build from sessions
-  let timeSeries;
+  let timeSeriesPromise;
   if (useSessionFilters || usePageFilter) {
     const sessionJoinPv = usePageFilter
       ? `INNER JOIN page_views pv ON pv.site_id = s.site_id AND pv.session_id = s.id`
@@ -182,284 +186,298 @@ export default withAuth(function handler(req, res) {
     const pvParams = usePageFilter ? [req.query.page] : [];
 
     if (req.query.period === '24h') {
-      timeSeries = db
-        .prepare(
-          `SELECT strftime('%Y-%m-%d %H:00', s.started_at) as date,
-                  COUNT(DISTINCT s.id) as sessions,
-                  COUNT(DISTINCT s.visitor_id) as visitors,
-                  COALESCE(SUM(s.page_count), 0) as page_views
-           FROM sessions s
-           ${sessionJoinPv}
-           WHERE s.site_id = ? AND s.started_at >= datetime('now', '-24 hours')${sfAliasedWhere}${pvFilterClause}
-           GROUP BY date ORDER BY date ASC`
-        )
-        .all(siteId, ...sfAliased.params, ...pvParams);
+      timeSeriesPromise = getRows(
+        `SELECT TO_CHAR(s.started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24":00"') as date,
+                COUNT(DISTINCT s.id) as sessions,
+                COUNT(DISTINCT s.visitor_id) as visitors,
+                COALESCE(SUM(s.page_count), 0) as page_views
+         FROM sessions s
+         ${sessionJoinPv}
+         WHERE s.site_id = ? AND s.started_at >= NOW() - INTERVAL '24 hours'${sfAliasedWhere}${pvFilterClause}
+         GROUP BY date ORDER BY date ASC`,
+        [siteId, ...sfAliased.params, ...pvParams]
+      );
     } else {
-      timeSeries = db
-        .prepare(
-          `SELECT date(s.started_at) as date,
-                  COUNT(DISTINCT s.visitor_id) as visitors,
-                  COUNT(DISTINCT s.id) as sessions,
-                  COALESCE(SUM(s.page_count), 0) as page_views
-           FROM sessions s
-           ${sessionJoinPv}
-           WHERE s.site_id = ? AND datetime(s.started_at) BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}
-           GROUP BY date ORDER BY date ASC`
-        )
-        .all(siteId, range.from, dateEnd, ...sfAliased.params, ...pvParams);
+      timeSeriesPromise = getRows(
+        `SELECT DATE(s.started_at) as date,
+                COUNT(DISTINCT s.visitor_id) as visitors,
+                COUNT(DISTINCT s.id) as sessions,
+                COALESCE(SUM(s.page_count), 0) as page_views
+         FROM sessions s
+         ${sessionJoinPv}
+         WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}
+         GROUP BY date ORDER BY date ASC`,
+        [siteId, range.from, dateEnd, ...sfAliased.params, ...pvParams]
+      );
     }
   } else {
     if (req.query.period === '24h') {
-      timeSeries = db
-        .prepare(
-          `SELECT strftime('%Y-%m-%d %H:00', timestamp) as date,
-                  COUNT(*) as page_views,
-                  COUNT(DISTINCT visitor_id) as visitors
-           FROM page_views
-           WHERE site_id = ? AND timestamp >= datetime('now', '-24 hours')
-           GROUP BY date ORDER BY date ASC`
-        )
-        .all(siteId);
+      timeSeriesPromise = getRows(
+        `SELECT TO_CHAR(timestamp AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24":00"') as date,
+                COUNT(*) as page_views,
+                COUNT(DISTINCT visitor_id) as visitors
+         FROM page_views
+         WHERE site_id = ? AND timestamp >= NOW() - INTERVAL '24 hours'
+         GROUP BY date ORDER BY date ASC`,
+        [siteId]
+      );
     } else {
-      timeSeries = db
-        .prepare(
-          `SELECT date, visitors, sessions, page_views
-           FROM daily_stats
-           WHERE site_id = ? AND date BETWEEN ? AND ?
-           ORDER BY date ASC`
-        )
-        .all(siteId, range.from, range.to);
+      timeSeriesPromise = getRows(
+        `SELECT date, visitors, sessions, page_views
+         FROM daily_stats
+         WHERE site_id = ? AND date BETWEEN ? AND ?
+         ORDER BY date ASC`,
+        [siteId, range.from, range.to]
+      );
     }
   }
 
-  // Helper: apply session filters to a sessions-based query
-  const sessQ = (baseWhere, baseParams, select, groupOrder) => {
-    return db
-      .prepare(`${select} FROM sessions WHERE ${baseWhere}${sfWhere} ${groupOrder}`)
-      .all(...baseParams, ...sf.params);
-  };
-
   // --- Sources ---
-  const sources = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ?`,
+  const sourcesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ?`,
     [siteId, range.from, dateEnd],
     `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
       COUNT(*) as sessions,
       COUNT(DISTINCT visitor_id) as visitors,
-      ROUND(AVG(is_bounce) * 100, 1) as bounce_rate`,
+      ROUND(AVG(is_bounce::float) * 100, 1) as bounce_rate`,
     `GROUP BY name ORDER BY sessions DESC LIMIT 20`
   );
 
   // --- Pages (from page_views, needs session join for filters) ---
-  let pages, entryPages, exitPages;
-
+  let pagesPromise;
   if (useSessionFilters) {
-    pages = db
-      .prepare(
-        `SELECT pv.pathname as name, COUNT(*) as views,
-          COUNT(DISTINCT pv.visitor_id) as visitors
-         FROM page_views pv
-         INNER JOIN sessions s ON s.site_id = pv.site_id AND s.id = pv.session_id
-         WHERE pv.site_id = ? AND datetime(pv.timestamp) BETWEEN ? AND ?${sfAliasedWhere}${pvfWhere}
-         GROUP BY pv.pathname ORDER BY views DESC LIMIT 20`
-      )
-      .all(siteId, range.from, dateEnd, ...sfAliased.params, ...pvf.params);
+    pagesPromise = getRows(
+      `SELECT pv.pathname as name, COUNT(*) as views,
+        COUNT(DISTINCT pv.visitor_id) as visitors
+       FROM page_views pv
+       INNER JOIN sessions s ON s.site_id = pv.site_id AND s.id = pv.session_id
+       WHERE pv.site_id = ? AND pv.timestamp BETWEEN ? AND ?${sfAliasedWhere}${pvfWhere}
+       GROUP BY pv.pathname ORDER BY views DESC LIMIT 20`,
+      [siteId, range.from, dateEnd, ...sfAliased.params, ...pvf.params]
+    );
   } else {
-    pages = db
-      .prepare(
-        `SELECT pathname as name, COUNT(*) as views,
-          COUNT(DISTINCT visitor_id) as visitors
-         FROM page_views
-         WHERE site_id = ? AND datetime(timestamp) BETWEEN ? AND ?${pvfWhere}
-         GROUP BY pathname ORDER BY views DESC LIMIT 20`
-      )
-      .all(siteId, range.from, dateEnd, ...pvf.params);
+    pagesPromise = getRows(
+      `SELECT pathname as name, COUNT(*) as views,
+        COUNT(DISTINCT visitor_id) as visitors
+       FROM page_views
+       WHERE site_id = ? AND timestamp BETWEEN ? AND ?${pvfWhere}
+       GROUP BY pathname ORDER BY views DESC LIMIT 20`,
+      [siteId, range.from, dateEnd, ...pvf.params]
+    );
   }
 
-  entryPages = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ?`,
+  const entryPagesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ?`,
     [siteId, range.from, dateEnd],
     `SELECT entry_page as name, COUNT(*) as sessions,
-      ROUND(AVG(is_bounce) * 100, 1) as bounce_rate`,
+      ROUND(AVG(is_bounce::float) * 100, 1) as bounce_rate`,
     `GROUP BY entry_page ORDER BY sessions DESC LIMIT 10`
   );
 
-  exitPages = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ?`,
+  const exitPagesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ?`,
     [siteId, range.from, dateEnd],
     `SELECT exit_page as name, COUNT(*) as sessions`,
     `GROUP BY exit_page ORDER BY sessions DESC LIMIT 10`
   );
 
   // --- Geography ---
-  const countries = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ? AND country IS NOT NULL AND country != ''`,
+  const countriesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ? AND country IS NOT NULL AND country != ''`,
     [siteId, range.from, dateEnd],
     `SELECT country as name, COUNT(*) as count`,
     `GROUP BY country ORDER BY count DESC LIMIT 20`
   );
 
-  const cities = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ? AND city IS NOT NULL AND city != ''`,
+  const citiesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ? AND city IS NOT NULL AND city != ''`,
     [siteId, range.from, dateEnd],
     `SELECT city as name, COUNT(*) as count`,
     `GROUP BY city ORDER BY count DESC LIMIT 20`
   );
 
   // --- Tech ---
-  const browsers = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ? AND browser IS NOT NULL AND browser != ''`,
+  const browsersPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ? AND browser IS NOT NULL AND browser != ''`,
     [siteId, range.from, dateEnd],
     `SELECT browser as name, COUNT(*) as count`,
     `GROUP BY browser ORDER BY count DESC LIMIT 10`
   );
 
-  const os = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ? AND os IS NOT NULL AND os != ''`,
+  const osPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ? AND os IS NOT NULL AND os != ''`,
     [siteId, range.from, dateEnd],
     `SELECT os as name, COUNT(*) as count`,
     `GROUP BY os ORDER BY count DESC LIMIT 10`
   );
 
-  const devices = sessQ(
-    `site_id = ? AND datetime(started_at) BETWEEN ? AND ? AND device_type IS NOT NULL AND device_type != ''`,
+  const devicesPromise = sessQ(
+    `site_id = ? AND started_at BETWEEN ? AND ? AND device_type IS NOT NULL AND device_type != ''`,
     [siteId, range.from, dateEnd],
     `SELECT device_type as name, COUNT(*) as count`,
     `GROUP BY device_type ORDER BY count DESC LIMIT 10`
   );
 
   // --- Conversions (apply session filters via join) ---
-  let convTotals, convBySource, convTimeSeries;
+  let convTotalsPromise, convBySourcePromise, convTimeSeriesPromise;
 
   if (useSessionFilters) {
-    convTotals = db
-      .prepare(
-        `SELECT
-          COUNT(*) as total_conversions,
-          COALESCE(SUM(c.amount), 0) as total_revenue,
-          COALESCE(AVG(c.amount), 0) as avg_value
-         FROM conversions c
-         INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
-         WHERE c.site_id = ? AND c.status = 'completed'
-         AND datetime(c.created_at) BETWEEN ? AND ?${sfAliasedWhere}`
-      )
-      .get(siteId, range.from, dateEnd, ...sfAliased.params);
+    convTotalsPromise = getRow(
+      `SELECT
+        COUNT(*) as total_conversions,
+        COALESCE(SUM(c.amount), 0) as total_revenue,
+        COALESCE(AVG(c.amount), 0) as avg_value
+       FROM conversions c
+       INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
+       WHERE c.site_id = ? AND c.status = 'completed'
+       AND c.created_at BETWEEN ? AND ?${sfAliasedWhere}`,
+      [siteId, range.from, dateEnd, ...sfAliased.params]
+    );
 
-    convBySource = db
-      .prepare(
-        `SELECT COALESCE(s.utm_source, s.referrer_domain, 'Direct') as name,
-          COUNT(*) as conversions,
-          SUM(c.amount) as revenue
-         FROM conversions c
-         INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
-         WHERE c.site_id = ? AND c.status = 'completed'
-         AND datetime(c.created_at) BETWEEN ? AND ?${sfAliasedWhere}
-         GROUP BY name ORDER BY revenue DESC LIMIT 10`
-      )
-      .all(siteId, range.from, dateEnd, ...sfAliased.params);
+    convBySourcePromise = getRows(
+      `SELECT COALESCE(s.utm_source, s.referrer_domain, 'Direct') as name,
+        COUNT(*) as conversions,
+        SUM(c.amount) as revenue
+       FROM conversions c
+       INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
+       WHERE c.site_id = ? AND c.status = 'completed'
+       AND c.created_at BETWEEN ? AND ?${sfAliasedWhere}
+       GROUP BY name ORDER BY revenue DESC LIMIT 10`,
+      [siteId, range.from, dateEnd, ...sfAliased.params]
+    );
 
-    convTimeSeries = db
-      .prepare(
-        `SELECT date(c.created_at) as date,
-          COUNT(*) as conversions,
-          SUM(c.amount) as revenue
-         FROM conversions c
-         INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
-         WHERE c.site_id = ? AND c.status = 'completed'
-         AND datetime(c.created_at) BETWEEN ? AND ?${sfAliasedWhere}
-         GROUP BY date ORDER BY date ASC`
-      )
-      .all(siteId, range.from, dateEnd, ...sfAliased.params);
+    convTimeSeriesPromise = getRows(
+      `SELECT DATE(c.created_at) as date,
+        COUNT(*) as conversions,
+        SUM(c.amount) as revenue
+       FROM conversions c
+       INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
+       WHERE c.site_id = ? AND c.status = 'completed'
+       AND c.created_at BETWEEN ? AND ?${sfAliasedWhere}
+       GROUP BY date ORDER BY date ASC`,
+      [siteId, range.from, dateEnd, ...sfAliased.params]
+    );
   } else {
-    convTotals = db
-      .prepare(
-        `SELECT
-          COUNT(*) as total_conversions,
-          COALESCE(SUM(amount), 0) as total_revenue,
-          COALESCE(AVG(amount), 0) as avg_value
-         FROM conversions
-         WHERE site_id = ? AND status = 'completed'
-         AND datetime(created_at) BETWEEN ? AND ?`
-      )
-      .get(siteId, range.from, dateEnd);
+    convTotalsPromise = getRow(
+      `SELECT
+        COUNT(*) as total_conversions,
+        COALESCE(SUM(amount), 0) as total_revenue,
+        COALESCE(AVG(amount), 0) as avg_value
+       FROM conversions
+       WHERE site_id = ? AND status = 'completed'
+       AND created_at BETWEEN ? AND ?`,
+      [siteId, range.from, dateEnd]
+    );
 
-    convBySource = db
-      .prepare(
-        `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
-          COUNT(*) as conversions,
-          SUM(amount) as revenue
-         FROM conversions
-         WHERE site_id = ? AND status = 'completed'
-         AND datetime(created_at) BETWEEN ? AND ?
-         GROUP BY name ORDER BY revenue DESC LIMIT 10`
-      )
-      .all(siteId, range.from, dateEnd);
+    convBySourcePromise = getRows(
+      `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
+        COUNT(*) as conversions,
+        SUM(amount) as revenue
+       FROM conversions
+       WHERE site_id = ? AND status = 'completed'
+       AND created_at BETWEEN ? AND ?
+       GROUP BY name ORDER BY revenue DESC LIMIT 10`,
+      [siteId, range.from, dateEnd]
+    );
 
-    convTimeSeries = db
-      .prepare(
-        `SELECT date(created_at) as date,
-          COUNT(*) as conversions,
-          SUM(amount) as revenue
-         FROM conversions
-         WHERE site_id = ? AND status = 'completed'
-         AND datetime(created_at) BETWEEN ? AND ?
-         GROUP BY date ORDER BY date ASC`
-      )
-      .all(siteId, range.from, dateEnd);
+    convTimeSeriesPromise = getRows(
+      `SELECT DATE(created_at) as date,
+        COUNT(*) as conversions,
+        SUM(amount) as revenue
+       FROM conversions
+       WHERE site_id = ? AND status = 'completed'
+       AND created_at BETWEEN ? AND ?
+       GROUP BY date ORDER BY date ASC`,
+      [siteId, range.from, dateEnd]
+    );
+  }
+
+  // --- Affiliates ---
+  const affiliateBreakdownPromise = getRows(
+    `SELECT a.name, a.slug,
+      COALESCE(v.visits, 0) as visits,
+      COALESCE(c.conversions, 0) as conversions,
+      COALESCE(c.revenue, 0) as revenue
+     FROM affiliates a
+     LEFT JOIN (
+       SELECT affiliate_id, COUNT(*) as visits
+       FROM affiliate_visits
+       WHERE site_id = ? AND landed_at BETWEEN ? AND ?
+       GROUP BY affiliate_id
+     ) v ON v.affiliate_id = a.id
+     LEFT JOIN (
+       SELECT affiliate_id, COUNT(*) as conversions, SUM(amount) as revenue
+       FROM conversions
+       WHERE site_id = ? AND status = 'completed'
+         AND created_at BETWEEN ? AND ?
+       GROUP BY affiliate_id
+     ) c ON c.affiliate_id = a.id
+     WHERE a.site_id = ?
+     ORDER BY COALESCE(c.revenue, 0) DESC, COALESCE(v.visits, 0) DESC
+     LIMIT 10`,
+    [siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId]
+  );
+
+  // --- Daily source attribution ---
+  const rawDailySourcesPromise = getRows(
+    `SELECT DATE(started_at) as date,
+       COALESCE(utm_source, referrer_domain, 'Direct') as source,
+       COUNT(*) as count
+     FROM sessions
+     WHERE site_id = ? AND started_at BETWEEN ? AND ?
+     GROUP BY DATE(started_at), COALESCE(utm_source, referrer_domain, 'Direct')
+     ORDER BY date, count DESC`,
+    [siteId, range.from, dateEnd]
+  );
+
+  // Await all in parallel
+  const [
+    timeSeries,
+    sources,
+    pages,
+    entryPages,
+    exitPages,
+    countries,
+    cities,
+    browsers,
+    os,
+    devices,
+    convTotals,
+    convBySource,
+    convTimeSeries,
+    affiliateBreakdown,
+    rawDailySources,
+  ] = await Promise.all([
+    timeSeriesPromise,
+    sourcesPromise,
+    pagesPromise,
+    entryPagesPromise,
+    exitPagesPromise,
+    countriesPromise,
+    citiesPromise,
+    browsersPromise,
+    osPromise,
+    devicesPromise,
+    convTotalsPromise,
+    convBySourcePromise,
+    convTimeSeriesPromise,
+    affiliateBreakdownPromise,
+    rawDailySourcesPromise,
+  ]);
+
+  // Keep only the top source per day
+  const dailySources = {};
+  for (const row of rawDailySources) {
+    const dateKey = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date;
+    if (!dailySources[dateKey]) {
+      dailySources[dateKey] = { source: row.source, count: row.count };
+    }
   }
 
   const convRate =
     current.total_sessions > 0
       ? ((convTotals.total_conversions / current.total_sessions) * 100).toFixed(2)
       : 0;
-
-  // --- Affiliates ---
-  const affiliateBreakdown = db
-    .prepare(
-      `SELECT a.name, a.slug,
-        COALESCE(v.visits, 0) as visits,
-        COALESCE(c.conversions, 0) as conversions,
-        COALESCE(c.revenue, 0) as revenue
-       FROM affiliates a
-       LEFT JOIN (
-         SELECT affiliate_id, COUNT(*) as visits
-         FROM affiliate_visits
-         WHERE site_id = ? AND datetime(landed_at) BETWEEN ? AND ?
-         GROUP BY affiliate_id
-       ) v ON v.affiliate_id = a.id
-       LEFT JOIN (
-         SELECT affiliate_id, COUNT(*) as conversions, SUM(amount) as revenue
-         FROM conversions
-         WHERE site_id = ? AND status = 'completed'
-           AND datetime(created_at) BETWEEN ? AND ?
-         GROUP BY affiliate_id
-       ) c ON c.affiliate_id = a.id
-       WHERE a.site_id = ?
-       ORDER BY COALESCE(c.revenue, 0) DESC, COALESCE(v.visits, 0) DESC
-       LIMIT 10`
-    )
-    .all(siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId);
-
-  // --- Daily source attribution (top source per day for chart annotations) ---
-  const rawDailySources = db
-    .prepare(
-      `SELECT date(started_at) as date,
-         COALESCE(utm_source, referrer_domain, 'Direct') as source,
-         COUNT(*) as count
-       FROM sessions
-       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
-       GROUP BY date(started_at), COALESCE(utm_source, referrer_domain, 'Direct')
-       ORDER BY date, count DESC`
-    )
-    .all(siteId, range.from, dateEnd);
-
-  // Keep only the top source per day
-  const dailySources = {};
-  for (const row of rawDailySources) {
-    if (!dailySources[row.date]) {
-      dailySources[row.date] = { source: row.source, count: row.count };
-    }
-  }
 
   function pctChange(curr, prev) {
     if (prev === 0) return curr > 0 ? 100 : 0;

@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getRow } from '@/lib/db';
 import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth';
 
 export default async function handler(req, res) {
@@ -13,11 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const db = getDb();
-
-    const user = db
-      .prepare('SELECT * FROM users WHERE email = ?')
-      .get(email.toLowerCase());
+    const user = await getRow('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });

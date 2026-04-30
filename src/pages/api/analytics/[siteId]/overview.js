@@ -440,6 +440,27 @@ export default withAuth(function handler(req, res) {
     )
     .all(siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId);
 
+  // --- Daily source attribution (top source per day for chart annotations) ---
+  const rawDailySources = db
+    .prepare(
+      `SELECT date(started_at) as date,
+         COALESCE(utm_source, referrer_domain, 'Direct') as source,
+         COUNT(*) as count
+       FROM sessions
+       WHERE site_id = ? AND datetime(started_at) BETWEEN ? AND ?
+       GROUP BY date(started_at), COALESCE(utm_source, referrer_domain, 'Direct')
+       ORDER BY date, count DESC`
+    )
+    .all(siteId, range.from, dateEnd);
+
+  // Keep only the top source per day
+  const dailySources = {};
+  for (const row of rawDailySources) {
+    if (!dailySources[row.date]) {
+      dailySources[row.date] = { source: row.source, count: row.count };
+    }
+  }
+
   function pctChange(curr, prev) {
     if (prev === 0) return curr > 0 ? 100 : 0;
     return (((curr - prev) / prev) * 100).toFixed(1);
@@ -482,5 +503,6 @@ export default withAuth(function handler(req, res) {
       timeSeries: convTimeSeries,
     },
     affiliates: affiliateBreakdown,
+    dailySources,
   });
 });

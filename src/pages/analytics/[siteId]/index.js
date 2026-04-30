@@ -109,6 +109,7 @@ export default function Analytics() {
             <CombinedChart
               trafficData={data.timeSeries}
               revenueData={data.conversions?.timeSeries || []}
+              dailySources={data.dailySources || {}}
             />
           </div>
         </div>

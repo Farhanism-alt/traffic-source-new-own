@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { getRow, getRows, run } from './db';
 
 const LS_API_BASE = 'https://api.lemonsqueezy.com/v1';
 
@@ -17,11 +17,9 @@ async function lsGet(path, apiKey) {
 }
 
 export async function syncLemonSqueezyPayments() {
-  const db = getDb();
-
-  const sites = db
-    .prepare('SELECT id, lemonsqueezy_api_key FROM sites WHERE lemonsqueezy_api_key IS NOT NULL')
-    .all();
+  const sites = await getRows(
+    'SELECT id, lemonsqueezy_api_key FROM sites WHERE lemonsqueezy_api_key IS NOT NULL'
+  );
 
   if (sites.length === 0) return { sites: 0, conversions: 0, refunds: 0 };
 
@@ -52,9 +50,10 @@ export async function syncLemonSqueezyPayments() {
           const orderId = String(order.id);
 
           // Dedup: skip already-processed orders
-          const existing = db
-            .prepare('SELECT id FROM conversions WHERE payment_intent_id = ? AND site_id = ?')
-            .get(orderId, site.id);
+          const existing = await getRow(
+            'SELECT id FROM conversions WHERE payment_intent_id = ? AND site_id = ?',
+            [orderId, site.id]
+          );
           if (existing) continue;
 
           // Extract visitor/session IDs from custom_data
@@ -66,7 +65,7 @@ export async function syncLemonSqueezyPayments() {
           let utmSource = null, utmMedium = null, utmCampaign = null, referrerDomain = null;
 
           if (sessionId) {
-            const origSession = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
+            const origSession = await getRow('SELECT * FROM sessions WHERE id = ?', [sessionId]);
             if (origSession) {
               utmSource = origSession.utm_source;
               utmMedium = origSession.utm_medium;
@@ -76,9 +75,10 @@ export async function syncLemonSqueezyPayments() {
           }
 
           if (!utmSource && visitorId) {
-            const recentSession = db
-              .prepare('SELECT * FROM sessions WHERE visitor_id = ? ORDER BY started_at DESC LIMIT 1')
-              .get(visitorId);
+            const recentSession = await getRow(
+              'SELECT * FROM sessions WHERE visitor_id = ? ORDER BY started_at DESC LIMIT 1',
+              [visitorId]
+            );
             if (recentSession) {
               if (!sessionId) sessionId = recentSession.id;
               utmSource = recentSession.utm_source;
@@ -91,9 +91,10 @@ export async function syncLemonSqueezyPayments() {
           // Affiliate attribution
           let affiliateId = null;
           if (visitorId) {
-            const affiliateVisit = db
-              .prepare('SELECT affiliate_id FROM affiliate_visits WHERE visitor_id = ? AND site_id = ? ORDER BY landed_at DESC LIMIT 1')
-              .get(visitorId, site.id);
+            const affiliateVisit = await getRow(
+              'SELECT affiliate_id FROM affiliate_visits WHERE visitor_id = ? AND site_id = ? ORDER BY landed_at DESC LIMIT 1',
+              [visitorId, site.id]
+            );
             if (affiliateVisit) affiliateId = affiliateVisit.affiliate_id;
           }
 
@@ -101,25 +102,27 @@ export async function syncLemonSqueezyPayments() {
           const amount = attrs.total || 0;
           const currency = (attrs.currency || 'usd').toLowerCase();
 
-          db.prepare(
-            `INSERT OR IGNORE INTO conversions (
+          await run(
+            `INSERT INTO conversions (
               site_id, session_id, visitor_id, payment_intent_id,
               stripe_customer_email, amount, currency, status, payment_provider,
               utm_source, utm_medium, utm_campaign, referrer_domain, affiliate_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 'lemonsqueezy', ?, ?, ?, ?, ?)`
-          ).run(
-            site.id,
-            sessionId,
-            visitorId,
-            orderId,
-            attrs.user_email || null,
-            amount,
-            currency,
-            utmSource,
-            utmMedium,
-            utmCampaign,
-            referrerDomain,
-            affiliateId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', 'lemonsqueezy', ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING`,
+            [
+              site.id,
+              sessionId,
+              visitorId,
+              orderId,
+              attrs.user_email || null,
+              amount,
+              currency,
+              utmSource,
+              utmMedium,
+              utmCampaign,
+              referrerDomain,
+              affiliateId,
+            ]
           );
 
           totalProcessed++;
@@ -153,12 +156,11 @@ export async function syncLemonSqueezyPayments() {
           }
 
           const orderId = String(order.id);
-          const updated = db
-            .prepare(
-              "UPDATE conversions SET status = 'refunded' WHERE payment_intent_id = ? AND site_id = ? AND status = 'completed' AND payment_provider = 'lemonsqueezy'"
-            )
-            .run(orderId, site.id);
-          if (updated.changes > 0) totalRefunds++;
+          const updated = await run(
+            "UPDATE conversions SET status = 'refunded' WHERE payment_intent_id = ? AND site_id = ? AND status = 'completed' AND payment_provider = 'lemonsqueezy'",
+            [orderId, site.id]
+          );
+          if (updated.rowCount > 0) totalRefunds++;
         }
 
         if (reachedCutoff || !json.links?.next) break;

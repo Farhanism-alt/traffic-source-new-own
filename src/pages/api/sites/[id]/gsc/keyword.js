@@ -1,5 +1,5 @@
 import { withAuth } from '@/lib/withAuth';
-import { getDb } from '@/lib/db';
+import { getRow } from '@/lib/db';
 import { getSiteLink, getUserConnection, getDecryptedRefreshToken, refreshAccessToken, querySearchAnalytics } from '@/lib/gsc';
 import { alpha3ToAlpha2 } from '@/lib/iso-countries';
 
@@ -13,12 +13,13 @@ export default withAuth(async function handler(req, res) {
   if (!query) return res.status(400).json({ error: 'query required' });
   const days = PERIOD_DAYS[period] || 30;
 
-  const db = getDb();
-  const site = db.prepare('SELECT id FROM sites WHERE id = ? AND user_id = ?').get(id, req.user.userId);
+  const site = await getRow('SELECT id FROM sites WHERE id = ? AND user_id = ?', [
+    id,
+    req.user.userId,
+  ]);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const link = getSiteLink(id);
-  const conn = getUserConnection(req.user.userId);
+  const [link, conn] = await Promise.all([getSiteLink(id), getUserConnection(req.user.userId)]);
   if (!link || !conn) return res.status(400).json({ error: 'Not connected' });
 
   let accessToken;

@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 
@@ -21,38 +21,35 @@ import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 const FLOW_TTL_MS = 60_000; // 1 minute
 const flowCache = new Map(); // key -> { expires, journeys, entryOptions, totalVisitors }
 
-function loadJourneys(db, siteId, range, dateEnd, convertersOnly) {
+async function loadJourneys(siteId, range, dateEnd, convertersOnly) {
   const cacheKey = `${siteId}|${range.from}|${range.to}|${convertersOnly ? 1 : 0}`;
   const cached = flowCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) return cached;
 
   let rows;
   if (convertersOnly) {
-    // Join page_views to converted visitors in one shot.
-    rows = db
-      .prepare(
-        `SELECT pv.visitor_id, pv.pathname, pv.timestamp
-         FROM page_views pv
-         INNER JOIN (
-           SELECT DISTINCT visitor_id FROM conversions
-           WHERE site_id = ? AND status = 'completed'
-           AND datetime(created_at) BETWEEN ? AND ?
-         ) c ON c.visitor_id = pv.visitor_id
-         WHERE pv.site_id = ?
-         AND datetime(pv.timestamp) BETWEEN ? AND ?
-         ORDER BY pv.visitor_id, pv.timestamp ASC`
-      )
-      .all(siteId, range.from, dateEnd, siteId, range.from, dateEnd);
+    rows = await getRows(
+      `SELECT pv.visitor_id, pv.pathname, pv.timestamp
+       FROM page_views pv
+       INNER JOIN (
+         SELECT DISTINCT visitor_id FROM conversions
+         WHERE site_id = ? AND status = 'completed'
+         AND created_at BETWEEN ? AND ?
+       ) c ON c.visitor_id = pv.visitor_id
+       WHERE pv.site_id = ?
+       AND pv.timestamp BETWEEN ? AND ?
+       ORDER BY pv.visitor_id, pv.timestamp ASC`,
+      [siteId, range.from, dateEnd, siteId, range.from, dateEnd]
+    );
   } else {
-    rows = db
-      .prepare(
-        `SELECT visitor_id, pathname, timestamp
-         FROM page_views
-         WHERE site_id = ?
-         AND datetime(timestamp) BETWEEN ? AND ?
-         ORDER BY visitor_id, timestamp ASC`
-      )
-      .all(siteId, range.from, dateEnd);
+    rows = await getRows(
+      `SELECT visitor_id, pathname, timestamp
+       FROM page_views
+       WHERE site_id = ?
+       AND timestamp BETWEEN ? AND ?
+       ORDER BY visitor_id, timestamp ASC`,
+      [siteId, range.from, dateEnd]
+    );
   }
 
   // Single linear pass: bucket by visitor_id, dedupe consecutive pathnames.
@@ -132,22 +129,20 @@ function buildTree(journeys, rootPath, depth, topN) {
   return { pathname: rootPath, visitors: rootSuffixes.length, children: tree.children };
 }
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const { siteId } = req.query;
-  const site = verifySiteOwnership(siteId, req.user.userId);
+  const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const db = getDb();
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';
   const depth = Math.min(6, Math.max(1, parseInt(req.query.depth) || 4));
   const topN = Math.min(5, Math.max(1, parseInt(req.query.topN) || 3));
   const convertersOnly = req.query.converters === '1';
 
-  const { journeys, entryOptions, totalVisitors } = loadJourneys(
-    db,
+  const { journeys, entryOptions, totalVisitors } = await loadJourneys(
     siteId,
     range,
     dateEnd,

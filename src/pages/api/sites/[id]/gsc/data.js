@@ -1,20 +1,24 @@
 import { withAuth } from '@/lib/withAuth';
-import { getDb } from '@/lib/db';
+import { getRow, getRows } from '@/lib/db';
 import { getSiteLink, getUserConnection } from '@/lib/gsc';
 import { alpha3ToAlpha2 } from '@/lib/iso-countries';
 
 const PERIOD_DAYS = { '24h': 1, '7d': 7, '30d': 30, '90d': 90, '12m': 90 };
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   const { id, period = '30d' } = req.query;
   const days = PERIOD_DAYS[period] || 30;
 
-  const db = getDb();
-  const site = db.prepare('SELECT id, name, domain FROM sites WHERE id = ? AND user_id = ?').get(id, req.user.userId);
+  const site = await getRow(
+    'SELECT id, name, domain FROM sites WHERE id = ? AND user_id = ?',
+    [id, req.user.userId]
+  );
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const userConn = getUserConnection(req.user.userId);
-  const link = getSiteLink(id);
+  const [userConn, link] = await Promise.all([
+    getUserConnection(req.user.userId),
+    getSiteLink(id),
+  ]);
 
   if (!userConn) return res.status(200).json({ site, googleConnected: false, linked: false });
   if (!link) return res.status(200).json({ site, googleConnected: true, googleEmail: userConn.google_email, linked: false });
@@ -22,13 +26,13 @@ export default withAuth(function handler(req, res) {
   // GSC has 2-3d lag — anchor end at today-1 (exclusive), so data through today-2 is included.
   // Current window: dates >= today-(days+1) and < today-1   → covers `days` full days ending at today-2
   // Previous window: dates >= today-(2*days+1) and < today-(days+1)
-  const curStart = `date('now','-${days + 1} days')`;
-  const curEnd = `date('now','-1 days')`;
-  const prevStart = `date('now','-${2 * days + 1} days')`;
-  const prevEnd = `date('now','-${days + 1} days')`;
+  const curStart = `CURRENT_DATE - INTERVAL '${days + 1} days'`;
+  const curEnd = `CURRENT_DATE - INTERVAL '1 days'`;
+  const prevStart = `CURRENT_DATE - INTERVAL '${2 * days + 1} days'`;
+  const prevEnd = `CURRENT_DATE - INTERVAL '${days + 1} days'`;
 
   // ── Totals: current + previous, weighted CTR/position (from gsc_daily_totals — most accurate) ──
-  const totalsRow = db.prepare(`
+  const totalsRow = await getRow(`
     SELECT
       SUM(CASE WHEN date >= ${curStart} AND date < ${curEnd} THEN clicks ELSE 0 END) AS clicks,
       SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN clicks ELSE 0 END) AS clicks_prev,
@@ -39,7 +43,7 @@ export default withAuth(function handler(req, res) {
       SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN position * impressions ELSE 0 END) AS pos_num_prev,
       SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN impressions ELSE 0 END) AS pos_den_prev
     FROM gsc_daily_totals WHERE site_id = ?
-  `).get(id) || {};
+  `, [id]) || {};
 
   const totals = {
     clicks: totalsRow.clicks || 0,
@@ -53,15 +57,15 @@ export default withAuth(function handler(req, res) {
   };
 
   // ── Time series for the current window (from totals — accurate, includes anonymized) ──
-  const timeSeries = db.prepare(`
+  const timeSeries = await getRows(`
     SELECT date, clicks, impressions
     FROM gsc_daily_totals
     WHERE site_id = ? AND date >= ${curStart} AND date < ${curEnd}
     ORDER BY date ASC
-  `).all(id);
+  `, [id]);
 
   // ── Top pages (current period) — from page-only fetch, includes impression-only pages ──
-  const topPages = db.prepare(`
+  const topPages = await getRows(`
     SELECT page,
       SUM(clicks) AS clicks,
       SUM(impressions) AS impressions,
@@ -72,9 +76,9 @@ export default withAuth(function handler(req, res) {
     GROUP BY page
     ORDER BY impressions DESC
     LIMIT 100
-  `).all(id);
+  `, [id]);
 
-  const topCountriesRaw = db.prepare(`
+  const topCountriesRaw = await getRows(`
     SELECT country,
       SUM(clicks) AS clicks,
       SUM(impressions) AS impressions,
@@ -85,14 +89,14 @@ export default withAuth(function handler(req, res) {
     GROUP BY country
     ORDER BY impressions DESC
     LIMIT 25
-  `).all(id);
+  `, [id]);
 
   const topCountries = topCountriesRaw.map((c) => ({
     ...c,
     country_code: alpha3ToAlpha2(c.country) || null,
   }));
 
-  const devices = db.prepare(`
+  const devices = await getRows(`
     SELECT device,
       SUM(clicks) AS clicks,
       SUM(impressions) AS impressions,
@@ -102,10 +106,10 @@ export default withAuth(function handler(req, res) {
     WHERE site_id = ? AND date >= ${curStart} AND date < ${curEnd}
     GROUP BY device
     ORDER BY impressions DESC
-  `).all(id);
+  `, [id]);
 
   // ── Per-query aggregation, current + previous, used for top + insights ──
-  const queryRows = db.prepare(`
+  const queryRows = await getRows(`
     SELECT query,
       SUM(CASE WHEN date >= ${curStart} AND date < ${curEnd} THEN clicks ELSE 0 END) AS clicks,
       SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN clicks ELSE 0 END) AS clicks_prev,
@@ -118,8 +122,11 @@ export default withAuth(function handler(req, res) {
     FROM gsc_daily
     WHERE site_id = ?
     GROUP BY query
-    HAVING (clicks + clicks_prev + impressions + impressions_prev) > 0
-  `).all(id);
+    HAVING (SUM(CASE WHEN date >= ${curStart} AND date < ${curEnd} THEN clicks ELSE 0 END)
+          + SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN clicks ELSE 0 END)
+          + SUM(CASE WHEN date >= ${curStart} AND date < ${curEnd} THEN impressions ELSE 0 END)
+          + SUM(CASE WHEN date >= ${prevStart} AND date < ${prevEnd} THEN impressions ELSE 0 END)) > 0
+  `, [id]);
 
   const enriched = queryRows.map((r) => {
     const position = r.pos_den ? r.pos_num / r.pos_den : 0;

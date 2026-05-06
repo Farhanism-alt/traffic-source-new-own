@@ -1,46 +1,52 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import { runMigrations } from './migrations';
+import pg from 'pg';
 
-const DB_PATH = process.env.DATABASE_PATH || './data/analytics.db';
+// Parse COUNT and other bigint results as JS numbers
+pg.types.setTypeParser(pg.types.builtins.INT8, (v) => parseInt(v, 10));
 
-let db;
+let pool;
 
-export function getDb() {
-  if (!db) {
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    db.pragma('busy_timeout = 5000');
-    runMigrations(db);
-    seedDefaultAdmin(db);
-  }
-  return db;
+function createPool() {
+  return new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.DATABASE_URL?.includes('supabase') ||
+      process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
+    max: 3,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
 }
 
-// Pre-computed bcrypt hash (10 rounds) for the default admin password
-const DEFAULT_ADMIN_HASH = '$2b$10$ErecOluYTDDfpn4DkRbEdOtR.U6VTmsmG824RNBmOF9fJR0DozqWK';
-
-function seedDefaultAdmin(db) {
-  const exists = db.prepare("SELECT id FROM users WHERE email = 'ism007'").get();
-  if (!exists) {
-    db.prepare('DELETE FROM users').run();
-    db.prepare('INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?)').run(
-      'ism007',
-      'Admin',
-      DEFAULT_ADMIN_HASH
-    );
+export function getPool() {
+  if (!pool) {
+    pool = createPool();
   }
+  return pool;
 }
 
-export function resetDb() {
-  if (db) {
-    try { db.close(); } catch {}
-  }
-  db = null;
+// Convert ? placeholders to $1, $2, ...
+function toPositional(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+export async function query(sql, params = []) {
+  const pgSql = toPositional(sql);
+  return getPool().query(pgSql, params);
+}
+
+export async function getRow(sql, params = []) {
+  const r = await query(sql, params);
+  return r.rows[0] || null;
+}
+
+export async function getRows(sql, params = []) {
+  const r = await query(sql, params);
+  return r.rows;
+}
+
+export async function run(sql, params = []) {
+  return query(sql, params);
 }

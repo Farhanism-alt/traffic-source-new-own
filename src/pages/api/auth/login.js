@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getRow } from '@/lib/db';
 import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth';
 
 export default async function handler(req, res) {
@@ -9,23 +9,19 @@ export default async function handler(req, res) {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+    return res.status(400).json({ error: 'Email and password are required' });
   }
 
   try {
-    const db = getDb();
-
-    const user = db
-      .prepare('SELECT * FROM users WHERE email = ?')
-      .get(email.toLowerCase().trim());
+    const user = await getRow('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const token = generateToken(user);

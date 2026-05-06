@@ -1,11 +1,11 @@
 import { withAuth } from '@/lib/withAuth';
 import { getBackupHistory } from '@/lib/backup';
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const history = getBackupHistory();
+  const history = await getBackupHistory();
   return res.json({ history });
 });

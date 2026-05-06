@@ -1,8 +1,8 @@
-import { getDb } from '@/lib/db';
+import { getRow, getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { verifySiteOwnership } from '@/lib/analytics';
 
-export default withAuth(function handler(req, res) {
+export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -12,45 +12,47 @@ export default withAuth(function handler(req, res) {
     return res.status(400).json({ error: 'visitorId is required' });
   }
 
-  const site = verifySiteOwnership(siteId, req.user.userId);
+  const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
-
-  const db = getDb();
 
   // Get the conversion record
   let conversion = null;
   if (conversionId) {
-    conversion = db.prepare(
-      `SELECT * FROM conversions WHERE id = ? AND site_id = ? AND visitor_id = ?`
-    ).get(conversionId, siteId, visitorId);
+    conversion = await getRow(
+      `SELECT * FROM conversions WHERE id = ? AND site_id = ? AND visitor_id = ?`,
+      [conversionId, siteId, visitorId]
+    );
   } else {
-    conversion = db.prepare(
+    conversion = await getRow(
       `SELECT * FROM conversions
        WHERE site_id = ? AND visitor_id = ? AND status = 'completed'
-       ORDER BY created_at DESC LIMIT 1`
-    ).get(siteId, visitorId);
+       ORDER BY created_at DESC LIMIT 1`,
+      [siteId, visitorId]
+    );
   }
 
-  // Get ALL sessions for this visitor ordered chronologically
-  const sessions = db.prepare(
-    `SELECT id, started_at, last_activity, entry_page, exit_page,
-            country, city, browser, os, device_type,
-            referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
-            page_count, duration, is_bounce
-     FROM sessions
-     WHERE site_id = ? AND visitor_id = ?
-     ORDER BY started_at ASC
-     LIMIT 50`
-  ).all(siteId, visitorId);
-
-  // Get ALL page views for this visitor ordered chronologically
-  const pageViews = db.prepare(
-    `SELECT id, session_id, pathname, hostname, querystring, timestamp
-     FROM page_views
-     WHERE site_id = ? AND visitor_id = ?
-     ORDER BY timestamp ASC
-     LIMIT 500`
-  ).all(siteId, visitorId);
+  // Get ALL sessions and page views in parallel
+  const [sessions, pageViews] = await Promise.all([
+    getRows(
+      `SELECT id, started_at, last_activity, entry_page, exit_page,
+              country, city, browser, os, device_type,
+              referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
+              page_count, duration, is_bounce
+       FROM sessions
+       WHERE site_id = ? AND visitor_id = ?
+       ORDER BY started_at ASC
+       LIMIT 50`,
+      [siteId, visitorId]
+    ),
+    getRows(
+      `SELECT id, session_id, pathname, hostname, querystring, timestamp
+       FROM page_views
+       WHERE site_id = ? AND visitor_id = ?
+       ORDER BY timestamp ASC
+       LIMIT 500`,
+      [siteId, visitorId]
+    ),
+  ]);
 
   // Group page views by session
   const pageViewsBySession = {};
@@ -62,7 +64,7 @@ export default withAuth(function handler(req, res) {
   }
 
   // Assemble sessions with their page views
-  const sessionsWithPages = sessions.map(session => ({
+  const sessionsWithPages = sessions.map((session) => ({
     ...session,
     pageViews: pageViewsBySession[session.id] || [],
   }));

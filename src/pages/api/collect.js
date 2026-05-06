@@ -1,6 +1,5 @@
-import { getDb } from '@/lib/db';
+import { getRow, run } from '@/lib/db';
 const UAParser = require('ua-parser-js');
-const geoip = require('geoip-lite');
 
 export const config = {
   api: {
@@ -10,7 +9,7 @@ export const config = {
   },
 };
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -27,17 +26,16 @@ export default function handler(req, res) {
 
     // Heartbeat: only refresh last_activity, no new records
     if (data.type === 'heartbeat') {
-      const db = getDb();
-      const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(data.site_id);
+      const site = await getRow('SELECT id FROM sites WHERE id = ?', [data.site_id]);
       if (!site) return res.status(404).end();
-      db.prepare("UPDATE sessions SET last_activity = datetime('now') WHERE id = ? AND site_id = ?")
-        .run(data.session_id, data.site_id);
+      await run('UPDATE sessions SET last_activity = NOW() WHERE id = ? AND site_id = ?', [
+        data.session_id,
+        data.site_id,
+      ]);
       return res.status(200).end();
     }
 
-    const db = getDb();
-
-    const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(data.site_id);
+    const site = await getRow('SELECT id FROM sites WHERE id = ?', [data.site_id]);
     if (!site) {
       return res.status(404).end();
     }
@@ -47,25 +45,14 @@ export default function handler(req, res) {
     const os = ua.getOS();
     const device = ua.getDevice();
 
-    let country = req.headers['cf-ipcountry'] || null;
-    let city = req.headers['cf-ipcity'] || null;
-    let continent = req.headers['cf-ipcontinent'] || null;
-
-    // Fall back to geoip-lite when not behind Cloudflare
-    if (!country) {
-      const rawIp = req.headers['cf-connecting-ip']
-        || req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-        || req.socket?.remoteAddress
-        || null;
-      const ip = rawIp === '::1' || rawIp === '127.0.0.1' ? null : rawIp;
-      if (ip) {
-        const geo = geoip.lookup(ip);
-        if (geo) {
-          country = geo.country || null;
-          city = geo.city || null;
-        }
-      }
-    }
+    // Use Vercel geo headers first, then Cloudflare
+    let country =
+      req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'] || null;
+    let city = req.headers['x-vercel-ip-city']
+      ? decodeURIComponent(req.headers['x-vercel-ip-city'])
+      : req.headers['cf-ipcity'] || null;
+    let continent =
+      req.headers['x-vercel-ip-continent'] || req.headers['cf-ipcontinent'] || null;
 
     let referrerDomain = null;
     if (data.referrer) {
@@ -84,69 +71,75 @@ export default function handler(req, res) {
           ? 'tablet'
           : 'desktop');
 
-    const existingSession = db
-      .prepare('SELECT id, page_count FROM sessions WHERE id = ?')
-      .get(data.session_id);
+    const existingSession = await getRow(
+      'SELECT id, page_count FROM sessions WHERE id = ?',
+      [data.session_id]
+    );
 
     if (!existingSession) {
-      db.prepare(
+      await run(
         `INSERT INTO sessions (
           id, site_id, visitor_id, entry_page, exit_page,
           referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
           utm_term, utm_content, country, city, continent,
           browser, browser_version, os, os_version, device_type,
           screen_width, screen_height
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        data.session_id,
-        data.site_id,
-        data.visitor_id,
-        data.pathname,
-        data.pathname,
-        data.referrer || null,
-        referrerDomain,
-        data.utm_source || null,
-        data.utm_medium || null,
-        data.utm_campaign || null,
-        data.utm_term || null,
-        data.utm_content || null,
-        country,
-        city,
-        continent,
-        browser.name || null,
-        browser.version || null,
-        os.name || null,
-        os.version || null,
-        deviceType,
-        data.screen_width || null,
-        data.screen_height || null
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          data.session_id,
+          data.site_id,
+          data.visitor_id,
+          data.pathname,
+          data.pathname,
+          data.referrer || null,
+          referrerDomain,
+          data.utm_source || null,
+          data.utm_medium || null,
+          data.utm_campaign || null,
+          data.utm_term || null,
+          data.utm_content || null,
+          country,
+          city,
+          continent,
+          browser.name || null,
+          browser.version || null,
+          os.name || null,
+          os.version || null,
+          deviceType,
+          data.screen_width || null,
+          data.screen_height || null,
+        ]
       );
     } else {
-      db.prepare(
+      await run(
         `UPDATE sessions SET
           exit_page = ?,
-          last_activity = datetime('now'),
+          last_activity = NOW(),
           page_count = page_count + 1,
-          is_bounce = 0,
-          duration = CAST((julianday('now') - julianday(started_at)) * 86400 AS INTEGER)
-        WHERE id = ?`
-      ).run(data.pathname, data.session_id);
+          is_bounce = false,
+          duration = EXTRACT(EPOCH FROM NOW() - started_at)::INTEGER
+        WHERE id = ?`,
+        [data.pathname, data.session_id]
+      );
     }
 
     // Affiliate tracking
     if (data.ref) {
-      const affiliate = db
-        .prepare('SELECT id FROM affiliates WHERE site_id = ? AND slug = ?')
-        .get(data.site_id, data.ref);
+      const affiliate = await getRow(
+        'SELECT id FROM affiliates WHERE site_id = ? AND slug = ?',
+        [data.site_id, data.ref]
+      );
       if (affiliate) {
-        const alreadyTracked = db
-          .prepare('SELECT id FROM affiliate_visits WHERE affiliate_id = ? AND visitor_id = ? AND session_id = ?')
-          .get(affiliate.id, data.visitor_id, data.session_id);
+        const alreadyTracked = await getRow(
+          'SELECT id FROM affiliate_visits WHERE affiliate_id = ? AND visitor_id = ? AND session_id = ?',
+          [affiliate.id, data.visitor_id, data.session_id]
+        );
         if (!alreadyTracked) {
-          db.prepare(
+          await run(
             `INSERT INTO affiliate_visits (affiliate_id, site_id, visitor_id, session_id, landing_page)
-             VALUES (?, ?, ?, ?, ?)`
-          ).run(affiliate.id, data.site_id, data.visitor_id, data.session_id, data.pathname);
+             VALUES (?, ?, ?, ?, ?)`,
+            [affiliate.id, data.site_id, data.visitor_id, data.session_id, data.pathname]
+          );
         }
       }
     }
@@ -159,41 +152,44 @@ export default function handler(req, res) {
         // invalid URL
       }
 
-      db.prepare(
+      await run(
         `INSERT INTO page_views (site_id, session_id, visitor_id, pathname, hostname, querystring, referrer)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        data.site_id,
-        data.session_id,
-        data.visitor_id,
-        data.pathname,
-        data.hostname || null,
-        querystring,
-        data.referrer || null
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          data.site_id,
+          data.session_id,
+          data.visitor_id,
+          data.pathname,
+          data.hostname || null,
+          querystring,
+          data.referrer || null,
+        ]
       );
 
       const today = new Date().toISOString().slice(0, 10);
-      db.prepare(
+      await run(
         `INSERT INTO daily_stats (site_id, date, page_views, sessions, visitors)
          VALUES (?, ?, 1, 0, 0)
-         ON CONFLICT(site_id, date) DO UPDATE SET page_views = page_views + 1`
-      ).run(data.site_id, today);
+         ON CONFLICT (site_id, date) DO UPDATE SET page_views = daily_stats.page_views + 1`,
+        [data.site_id, today]
+      );
 
       if (!existingSession) {
-        const visitorToday = db
-          .prepare(
-            `SELECT 1 FROM sessions
-             WHERE site_id = ? AND visitor_id = ? AND date(started_at) = ? AND id != ?
-             LIMIT 1`
-          )
-          .get(data.site_id, data.visitor_id, today, data.session_id);
+        const visitorToday = await getRow(
+          `SELECT 1 FROM sessions
+           WHERE site_id = ? AND visitor_id = ? AND DATE(started_at) = ? AND id != ?
+           LIMIT 1`,
+          [data.site_id, data.visitor_id, today, data.session_id]
+        );
 
-        db.prepare(
+        const visitorDelta = visitorToday ? 0 : 1;
+        await run(
           `UPDATE daily_stats SET
             sessions = sessions + 1,
-            visitors = visitors + CASE WHEN ? THEN 0 ELSE 1 END
-           WHERE site_id = ? AND date = ?`
-        ).run(visitorToday ? 1 : 0, data.site_id, today);
+            visitors = visitors + ?
+           WHERE site_id = ? AND date = ?`,
+          [visitorDelta, data.site_id, today]
+        );
       }
     }
 

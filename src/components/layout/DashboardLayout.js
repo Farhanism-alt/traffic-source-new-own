@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import ProtectedRoute from '../ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,11 +15,19 @@ const periods = [
 ];
 
 export default function DashboardLayout({ children, siteId, siteName, siteDomain }) {
-  const { period, setPeriod, setCustomRange } = useDateRange();
+  const { period, setPeriod, customRange, setCustomRange } = useDateRange();
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const path = router.asPath;
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const applyCustomRange = (from, to) => {
+    if (!from || !to || from > to) return;
+    setCustomRange({ from, to });
+    setPeriod(null);
+  };
 
   return (
     <ProtectedRoute>
@@ -119,16 +128,41 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                   )}
                 </div>
               </div>
-              <div className="date-picker">
-                {periods.map((p) => (
-                  <button
-                    key={p.value}
-                    className={period === p.value ? 'active' : ''}
-                    onClick={() => { setCustomRange(null); setPeriod(p.value); }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              <div className="date-picker-wrap">
+                <div className="date-picker">
+                  {periods.map((p) => (
+                    <button
+                      key={p.value}
+                      className={!customRange && period === p.value ? 'active' : ''}
+                      onClick={() => { setCustomRange(null); setPeriod(p.value); setCustomFrom(''); setCustomTo(''); }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="date-range-inputs">
+                  <input
+                    type="date"
+                    className="date-input"
+                    value={customFrom}
+                    max={customTo || undefined}
+                    onChange={(e) => {
+                      setCustomFrom(e.target.value);
+                      if (customTo && e.target.value) applyCustomRange(e.target.value, customTo);
+                    }}
+                  />
+                  <span className="date-range-sep">—</span>
+                  <input
+                    type="date"
+                    className="date-input"
+                    value={customTo}
+                    min={customFrom || undefined}
+                    onChange={(e) => {
+                      setCustomTo(e.target.value);
+                      if (customFrom && e.target.value) applyCustomRange(customFrom, e.target.value);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           )}

@@ -1,13 +1,13 @@
-import { getDb } from '@/lib/db';
+import { getRow, run } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 
-export default withAuth(function handler(req, res) {
-  const db = getDb();
+export default withAuth(async function handler(req, res) {
   const { id } = req.query;
 
-  const site = db
-    .prepare('SELECT * FROM sites WHERE id = ? AND user_id = ?')
-    .get(id, req.user.userId);
+  const site = await getRow('SELECT * FROM sites WHERE id = ? AND user_id = ?', [
+    id,
+    req.user.userId,
+  ]);
 
   if (!site) {
     return res.status(404).json({ error: 'Site not found' });
@@ -36,31 +36,28 @@ export default withAuth(function handler(req, res) {
       ? domain.replace(/^https?:\/\//, '').replace(/\/+$/, '')
       : site.domain;
 
-    db.prepare('UPDATE sites SET domain = ?, name = ? WHERE id = ?').run(
+    await run('UPDATE sites SET domain = ?, name = ? WHERE id = ?', [
       cleanDomain,
       name || site.name,
-      id
-    );
+      id,
+    ]);
 
     if (stripe_secret_key !== undefined) {
-      db.prepare('UPDATE sites SET stripe_secret_key = ? WHERE id = ?').run(
+      await run('UPDATE sites SET stripe_secret_key = ? WHERE id = ?', [
         stripe_secret_key || null,
-        id
-      );
+        id,
+      ]);
     }
 
     if (dodo_api_key !== undefined) {
-      db.prepare('UPDATE sites SET dodo_api_key = ? WHERE id = ?').run(
-        dodo_api_key || null,
-        id
-      );
+      await run('UPDATE sites SET dodo_api_key = ? WHERE id = ?', [dodo_api_key || null, id]);
     }
 
     if (lemonsqueezy_api_key !== undefined) {
-      db.prepare('UPDATE sites SET lemonsqueezy_api_key = ? WHERE id = ?').run(
+      await run('UPDATE sites SET lemonsqueezy_api_key = ? WHERE id = ?', [
         lemonsqueezy_api_key || null,
-        id
-      );
+        id,
+      ]);
     }
 
     if (is_public !== undefined) {
@@ -72,24 +69,30 @@ export default withAuth(function handler(req, res) {
         }
         slug = slug.replace(/[^a-z0-9-]/gi, '').toLowerCase();
         // Check uniqueness
-        const existing = db.prepare('SELECT id FROM sites WHERE public_slug = ? AND id != ?').get(slug, id);
+        const existing = await getRow(
+          'SELECT id FROM sites WHERE public_slug = ? AND id != ?',
+          [slug, id]
+        );
         if (existing) {
           return res.status(400).json({ error: 'This slug is already taken. Please choose a different one.' });
         }
-        db.prepare('UPDATE sites SET is_public = 1, public_slug = ? WHERE id = ?').run(slug, id);
+        await run('UPDATE sites SET is_public = true, public_slug = ? WHERE id = ?', [slug, id]);
       } else {
-        db.prepare('UPDATE sites SET is_public = 0 WHERE id = ?').run(id);
+        await run('UPDATE sites SET is_public = false WHERE id = ?', [id]);
       }
     } else if (public_slug !== undefined && site.is_public) {
       const slug = public_slug.replace(/[^a-z0-9-]/gi, '').toLowerCase();
-      const existing = db.prepare('SELECT id FROM sites WHERE public_slug = ? AND id != ?').get(slug, id);
+      const existing = await getRow(
+        'SELECT id FROM sites WHERE public_slug = ? AND id != ?',
+        [slug, id]
+      );
       if (existing) {
         return res.status(400).json({ error: 'This slug is already taken. Please choose a different one.' });
       }
-      db.prepare('UPDATE sites SET public_slug = ? WHERE id = ?').run(slug, id);
+      await run('UPDATE sites SET public_slug = ? WHERE id = ?', [slug, id]);
     }
 
-    const updated = db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
+    const updated = await getRow('SELECT * FROM sites WHERE id = ?', [id]);
     const maskedUpdated = { ...updated };
     if (maskedUpdated.stripe_secret_key) {
       maskedUpdated.stripe_secret_key = '••••' + maskedUpdated.stripe_secret_key.slice(-4);
@@ -107,7 +110,7 @@ export default withAuth(function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
-    db.prepare('DELETE FROM sites WHERE id = ?').run(id);
+    await run('DELETE FROM sites WHERE id = ?', [id]);
     return res.status(200).json({ success: true });
   }
 

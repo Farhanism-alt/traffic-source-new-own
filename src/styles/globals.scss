@@ -462,6 +462,7 @@ a {
     justify-content: space-between;
     margin-bottom: 20px;
     gap: 16px;
+    flex-wrap: wrap;
 }
 
 .page-header-site {
@@ -542,6 +543,47 @@ a {
 }
 
 // ── Date Picker ──
+.date-picker-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.date-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.date-range-sep {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 0 2px;
+}
+
+.date-input {
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: var(--font);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.12s;
+
+    &:focus {
+        border-color: var(--border-focus);
+    }
+
+    &::-webkit-calendar-picker-indicator {
+        filter: invert(0.6);
+        cursor: pointer;
+    }
+}
+
 .date-picker {
     display: flex;
     align-items: center;

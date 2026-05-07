@@ -13,11 +13,9 @@ export async function syncDodoPayments() {
 
   for (const site of sites) {
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
-    const since = new Date(Date.now() - 86400 * 1000).toISOString();
 
     try {
       for await (const payment of dodo.payments.list({
-        created_at_gte: since,
         status: 'succeeded',
         page_size: 100,
       })) {
@@ -99,7 +97,6 @@ export async function syncDodoPayments() {
 
       // Check for refunds by looking at payments with refund_status
       for await (const payment of dodo.payments.list({
-        created_at_gte: since,
         page_size: 100,
       })) {
         if (!payment.refund_status) continue;

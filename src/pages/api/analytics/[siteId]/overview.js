@@ -239,7 +239,7 @@ export default withAuth(async function handler(req, res) {
     `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
       COUNT(*) as sessions,
       COUNT(DISTINCT visitor_id) as visitors,
-      ROUND(AVG(is_bounce::float) * 100, 1) as bounce_rate`,
+      ROUND(AVG(is_bounce::int) * 100, 1) as bounce_rate`,
     `GROUP BY name ORDER BY sessions DESC LIMIT 20`
   );
 
@@ -270,7 +270,7 @@ export default withAuth(async function handler(req, res) {
     `site_id = ? AND started_at BETWEEN ? AND ?`,
     [siteId, range.from, dateEnd],
     `SELECT entry_page as name, COUNT(*) as sessions,
-      ROUND(AVG(is_bounce::float) * 100, 1) as bounce_rate`,
+      ROUND(AVG(is_bounce::int) * 100, 1) as bounce_rate`,
     `GROUP BY entry_page ORDER BY sessions DESC LIMIT 10`
   );
 

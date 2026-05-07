@@ -6,21 +6,20 @@ export default async function handler(req, res) {
     ? dbUrl.replace(/:([^:@]+)@/, ':***@').substring(0, 80)
     : 'NOT SET';
 
-  try {
-    const result = await query('SELECT COUNT(*)::int as users FROM users');
-    return res.status(200).json({
-      ok: true,
-      db_url_set: !!dbUrl,
-      db_url_preview: masked,
-      users_count: result.rows[0].users,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      ok: false,
-      db_url_set: !!dbUrl,
-      db_url_preview: masked,
-      error: err.message,
-      code: err.code,
-    });
+  const tables = ['users', 'sites', 'sessions', 'page_views', 'daily_stats', 'conversions', 'affiliates', 'affiliate_visits'];
+  const results = {};
+
+  for (const table of tables) {
+    try {
+      const r = await query(`SELECT COUNT(*)::int as n FROM ${table}`);
+      results[table] = { ok: true, count: r.rows[0].n };
+    } catch (err) {
+      results[table] = { ok: false, error: err.message };
+    }
   }
+
+  return res.status(200).json({
+    db_url_preview: masked,
+    tables: results,
+  });
 }

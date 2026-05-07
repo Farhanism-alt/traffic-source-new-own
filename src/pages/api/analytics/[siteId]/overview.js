@@ -2,6 +2,27 @@ import { getRow, getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 
+// In-memory cooldown: sync at most once every 5 minutes per site
+const lastSyncAt = {};
+
+async function syncPaymentsForSite(siteId) {
+  const now = Date.now();
+  if (lastSyncAt[siteId] && now - lastSyncAt[siteId] < 5 * 60 * 1000) return;
+  lastSyncAt[siteId] = now;
+  try {
+    const { syncDodoPayments } = await import('@/lib/dodo-sync');
+    await syncDodoPayments();
+  } catch {}
+  try {
+    const { syncStripePayments } = await import('@/lib/stripe-sync');
+    await syncStripePayments();
+  } catch {}
+  try {
+    const { syncLemonSqueezyPayments } = await import('@/lib/lemonsqueezy-sync');
+    await syncLemonSqueezyPayments();
+  } catch {}
+}
+
 function buildSessionFilters(query, alias = '') {
   const pfx = alias ? `${alias}.` : '';
   const clauses = [];
@@ -72,6 +93,8 @@ export default withAuth(async function handler(req, res) {
   const { siteId } = req.query;
   const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
+
+  await syncPaymentsForSite(siteId);
 
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';

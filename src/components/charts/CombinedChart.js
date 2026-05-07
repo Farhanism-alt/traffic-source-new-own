@@ -195,16 +195,25 @@ function formatTooltipDate(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+function toDateKey(d) {
+  if (!d) return '';
+  if (typeof d === 'string') return d.slice(0, 10);
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
 function mergeByDate(traffic = [], revenue = [], dailySources = {}) {
   const map = {};
   for (const t of traffic) {
-    map[t.date] = { ...t, revenue: 0 };
+    const key = toDateKey(t.date);
+    map[key] = { ...t, date: key, revenue: 0 };
   }
   for (const r of revenue) {
-    if (map[r.date]) {
-      map[r.date].revenue = r.revenue || 0;
+    const key = toDateKey(r.date);
+    if (map[key]) {
+      map[key].revenue = r.revenue || 0;
     } else {
-      map[r.date] = { date: r.date, visitors: 0, sessions: 0, revenue: r.revenue || 0 };
+      map[key] = { date: key, visitors: 0, sessions: 0, revenue: r.revenue || 0 };
     }
   }
 
@@ -216,7 +225,7 @@ function mergeByDate(traffic = [], revenue = [], dailySources = {}) {
   const threshold = avg * 1.5;
 
   for (const entry of entries) {
-    const src = dailySources[entry.date];
+    const src = dailySources[toDateKey(entry.date)];
     if (src && (entry.visitors || 0) > threshold && threshold > 0) {
       entry.spikeSrc = src.source;
     }

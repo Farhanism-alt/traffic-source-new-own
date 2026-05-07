@@ -34,7 +34,7 @@ export default withAuth(async function handler(req, res) {
        LEFT JOIN (
          SELECT affiliate_id,
            COUNT(*) as conversions,
-           SUM(amount) as revenue
+           SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue
          FROM conversions
          WHERE site_id = ? AND status = 'completed'
            AND created_at BETWEEN ? AND ?

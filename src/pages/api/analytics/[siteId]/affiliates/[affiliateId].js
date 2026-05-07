@@ -33,7 +33,7 @@ export default withAuth(async function handler(req, res) {
       getRow(
         `SELECT
           COUNT(*) as conversions,
-          COALESCE(SUM(amount), 0) as revenue
+          COALESCE(SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END), 0) as revenue
          FROM conversions
          WHERE affiliate_id = ? AND status = 'completed'
            AND created_at BETWEEN ? AND ?`,
@@ -51,7 +51,7 @@ export default withAuth(async function handler(req, res) {
       getRows(
         `SELECT DATE(created_at) as date,
           COUNT(*) as conversions,
-          SUM(amount) as revenue
+          SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue
          FROM conversions
          WHERE affiliate_id = ? AND status = 'completed'
            AND created_at BETWEEN ? AND ?

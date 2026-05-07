@@ -348,7 +348,7 @@ export default withAuth(async function handler(req, res) {
     convTotalsPromise = getRow(
       `SELECT
         COUNT(*) as total_conversions,
-        COALESCE(SUM(c.amount), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN c.currency = 'usd' THEN c.amount ELSE 0 END), 0) as total_revenue,
         COALESCE(AVG(c.amount), 0) as avg_value
        FROM conversions c
        INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
@@ -360,7 +360,7 @@ export default withAuth(async function handler(req, res) {
     convBySourcePromise = getRows(
       `SELECT COALESCE(s.utm_source, s.referrer_domain, 'Direct') as name,
         COUNT(*) as conversions,
-        SUM(c.amount) as revenue
+        SUM(CASE WHEN c.currency = 'usd' THEN c.amount ELSE 0 END) as revenue
        FROM conversions c
        INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
        WHERE c.site_id = ? AND c.status = 'completed'
@@ -372,7 +372,7 @@ export default withAuth(async function handler(req, res) {
     convTimeSeriesPromise = getRows(
       `SELECT DATE(c.created_at) as date,
         COUNT(*) as conversions,
-        SUM(c.amount) as revenue
+        SUM(CASE WHEN c.currency = 'usd' THEN c.amount ELSE 0 END) as revenue
        FROM conversions c
        INNER JOIN sessions s ON s.site_id = c.site_id AND s.id = c.session_id
        WHERE c.site_id = ? AND c.status = 'completed'
@@ -384,7 +384,7 @@ export default withAuth(async function handler(req, res) {
     convTotalsPromise = getRow(
       `SELECT
         COUNT(*) as total_conversions,
-        COALESCE(SUM(amount), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END), 0) as total_revenue,
         COALESCE(AVG(amount), 0) as avg_value
        FROM conversions
        WHERE site_id = ? AND status = 'completed'
@@ -395,7 +395,7 @@ export default withAuth(async function handler(req, res) {
     convBySourcePromise = getRows(
       `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name,
         COUNT(*) as conversions,
-        SUM(amount) as revenue
+        SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue
        FROM conversions
        WHERE site_id = ? AND status = 'completed'
        AND created_at BETWEEN ? AND ?
@@ -406,7 +406,7 @@ export default withAuth(async function handler(req, res) {
     convTimeSeriesPromise = getRows(
       `SELECT DATE(created_at) as date,
         COUNT(*) as conversions,
-        SUM(amount) as revenue
+        SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue
        FROM conversions
        WHERE site_id = ? AND status = 'completed'
        AND created_at BETWEEN ? AND ?
@@ -429,7 +429,7 @@ export default withAuth(async function handler(req, res) {
        GROUP BY affiliate_id
      ) v ON v.affiliate_id = a.id
      LEFT JOIN (
-       SELECT affiliate_id, COUNT(*) as conversions, SUM(amount) as revenue
+       SELECT affiliate_id, COUNT(*) as conversions, SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue
        FROM conversions
        WHERE site_id = ? AND status = 'completed'
          AND created_at BETWEEN ? AND ?

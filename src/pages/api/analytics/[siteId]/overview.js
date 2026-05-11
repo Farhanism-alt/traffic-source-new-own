@@ -47,7 +47,7 @@ export default withAuth(async function handler(req, res) {
   const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  await syncPaymentsForSite(siteId);
+  syncPaymentsForSite(siteId); // fire-and-forget: don't block the response
 
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';

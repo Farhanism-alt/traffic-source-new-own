@@ -25,13 +25,12 @@ export function useAnalytics(endpoint, extraParams = {}) {
 
   const fetchData = useCallback(async () => {
     if (!siteId) return;
-    setLoading(true);
+    // Only show full loading spinner on first load; keep stale data visible on refetch
+    setData(prev => { if (!prev) setLoading(true); return prev; });
     setError(null);
     try {
       const params = new URLSearchParams({ ...getParams(), ...filterParams, ...extraParams });
-      const res = await fetch(
-        `/api/analytics/${siteId}/${endpoint}?${params}`
-      );
+      const res = await fetch(`/api/analytics/${siteId}/${endpoint}?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       setData(await res.json());
     } catch (err) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useTheme } from '@/contexts/ThemeContext';
 import 'leaflet/dist/leaflet.css';
@@ -21,14 +21,20 @@ const COUNTRY_COORDS = {
   IE: [53.1, -8.2], HK: [22.4, 114.1], TW: [23.7, 120.9], LK: [7.9, 80.8],
 };
 
-function createAvatarIcon(visitorId) {
+function seededJitter(seed, index, range) {
+  let h = 0;
+  const s = String(seed) + String(index);
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return ((h % 10000) / 10000 - 0.5) * range * 2;
+}
+
+function createAvatarIcon(visitorId, selected) {
   const seed = visitorId || 'unknown';
+  const border = selected ? '#f59e0b' : '#22c55e';
   const src = `https://api.dicebear.com/9.x/micah/svg?seed=${encodeURIComponent(seed)}&size=32&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
   return L.divIcon({
     className: '',
-    html: `<div style="width:32px;height:32px;border-radius:50%;overflow:hidden;border:2px solid #22c55e;box-shadow:0 2px 8px rgba(0,0,0,0.2);background:#fff;">
-      <img src="${src}" width="32" height="32" style="display:block;" />
-    </div>`,
+    html: `<div style="width:32px;height:32px;border-radius:50%;overflow:hidden;border:2.5px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.25);background:#fff;"><img src="${src}" width="32" height="32" style="display:block;" /></div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18],
   });
@@ -37,83 +43,48 @@ function createAvatarIcon(visitorId) {
 function ThemeUpdater() {
   const { theme } = useTheme();
   const map = useMap();
-
-  useEffect(() => {
-    map.invalidateSize();
-  }, [map, theme]);
-
+  useEffect(() => { map.invalidateSize(); }, [map, theme]);
   return null;
 }
 
-export default function VisitorMap({ countries = [], activeUsers = [] }) {
-  const { theme } = useTheme();
+function MapClickDismiss({ onDismiss }) {
+  useMapEvents({ click: onDismiss });
+  return null;
+}
 
+export default function VisitorMap({ countries = [], activeUsers = [], selectedUser, onUserClick }) {
+  const { theme } = useTheme();
   const tileUrl = theme === 'dark'
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-
   const maxCount = Math.max(...countries.map(c => c.count), 1);
-
-  // Stable random offsets so avatars don't jump on re-render
   const userPositions = useMemo(() => {
-    return activeUsers
-      .filter(u => COUNTRY_COORDS[u.country])
-      .map(u => ({
-        ...u,
-        position: [
-          COUNTRY_COORDS[u.country][0] + (Math.random() - 0.5) * 4,
-          COUNTRY_COORDS[u.country][1] + (Math.random() - 0.5) * 4,
-        ],
-      }));
+    return activeUsers.filter(u => COUNTRY_COORDS[u.country]).map((u, i) => ({
+      ...u,
+      position: [
+        COUNTRY_COORDS[u.country][0] + seededJitter(u.visitor_id, i, 4),
+        COUNTRY_COORDS[u.country][1] + seededJitter(u.visitor_id, i + 1, 4),
+      ],
+    }));
   }, [activeUsers]);
 
   return (
-    <MapContainer
-      center={[20, 0]}
-      zoom={2}
-      scrollWheelZoom={false}
-      style={{ width: '100%', height: '100%', minHeight: 300, background: theme === 'dark' ? '#1b1b1c' : '#f5f5f5' }}
-      attributionControl={false}
-      zoomControl={true}
-    >
+    <MapContainer center={[20, 0]} zoom={2} scrollWheelZoom={false} style={{ width: '100%', height: '100%', background: theme === 'dark' ? '#1b1b1c' : '#f5f5f5' }} attributionControl={false} zoomControl={true}>
       <TileLayer url={tileUrl} />
       <ThemeUpdater />
-
-      {countries
-        .filter(c => COUNTRY_COORDS[c.name])
-        .map(c => {
-          const radius = Math.max(5, (c.count / maxCount) * 25);
-          return (
-            <CircleMarker
-              key={c.name}
-              center={COUNTRY_COORDS[c.name]}
-              radius={radius}
-              pathOptions={{
-                fillColor: '#3b82f6',
-                fillOpacity: 0.5,
-                color: '#3b82f6',
-                weight: 1,
-                opacity: 0.8,
-              }}
-            >
-              <Tooltip direction="top" offset={[0, -radius]}>
-                <span style={{ fontWeight: 600 }}>{c.name}</span>: {c.count} sessions
-              </Tooltip>
-            </CircleMarker>
-          );
-        })}
-
-      {userPositions.map((u, i) => (
-        <Marker
-          key={`active-${u.visitor_id || i}`}
-          position={u.position}
-          icon={createAvatarIcon(u.visitor_id)}
-        >
-          <Tooltip direction="top" offset={[0, -20]}>
-            {u.country} &middot; {u.current_page || '/'}
-          </Tooltip>
-        </Marker>
-      ))}
+      {onUserClick && <MapClickDismiss onDismiss={() => onUserClick(null)} />}
+      {countries.filter(c => COUNTRY_COORDS[c.name]).map(c => {
+        const radius = Math.max(5, (c.count / maxCount) * 25);
+        return <CircleMarker key={c.name} center={COUNTRY_COORDS[c.name]} radius={radius} pathOptions={{ fillColor: '#3b82f6', fillOpacity: 0.35, color: '#3b82f6', weight: 1, opacity: 0.7 }} />;
+      })}
+      {userPositions.map((u, i) => {
+        const isSelected = selectedUser?.visitor_id === u.visitor_id;
+        return (
+          <Marker key={`active-${u.visitor_id || i}`} position={u.position} icon={createAvatarIcon(u.visitor_id, isSelected)}
+            eventHandlers={{ click: (e) => { e.originalEvent.stopPropagation(); if (onUserClick) onUserClick(isSelected ? null : u); } }}
+          />
+        );
+      })}
     </MapContainer>
   );
 }

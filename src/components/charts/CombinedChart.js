@@ -13,7 +13,6 @@ import {
 } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
 
-// Same domain map as ChannelIcon
 const DOMAIN_MAP = {
   google: 'google.com', bing: 'bing.com', yahoo: 'yahoo.com',
   duckduckgo: 'duckduckgo.com', facebook: 'facebook.com',
@@ -32,20 +31,14 @@ function resolveDomain(name = '') {
   return null;
 }
 
-// Custom dot — shows a favicon circle above spike days
 function SpikeDot(props) {
   const { cx, cy, payload, ct } = props;
   const isSpike = payload?.spikeSrc;
-
   if (!isSpike) {
     return <circle key={`dot-${cx}`} cx={cx} cy={cy} r={2.5} fill={ct?.line || '#3b82f6'} fillOpacity={0.7} />;
   }
-
   const domain = resolveDomain(payload.spikeSrc);
-  const faviconUrl = domain
-    ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
-    : null;
-
+  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null;
   return (
     <g key={`spike-${cx}`}>
       <circle cx={cx} cy={cy} r={3} fill={ct?.line || '#3b82f6'} />
@@ -58,96 +51,56 @@ function SpikeDot(props) {
   );
 }
 
-export default function CombinedChart({ trafficData, revenueData, dailySources = {} }) {
+export default function CombinedChart({ trafficData, revenueData, dailySources = {}, onDayClick }) {
   const ct = useChartTheme();
   const merged = mergeByDate(trafficData, revenueData, dailySources);
 
   if (!merged || merged.length === 0) {
-    return (
-      <div className="empty-state">
-        <p>No data for this period</p>
-      </div>
-    );
+    return <div className="empty-state"><p>No data for this period</p></div>;
   }
 
   const hasRevenue = merged.some((d) => d.revenue > 0);
 
+  const handleChartClick = (chartData) => {
+    if (!onDayClick || !chartData?.activePayload?.[0]) return;
+    const d = chartData.activePayload[0].payload;
+    if (d?.date) onDayClick(d.date, d);
+  };
+
   return (
     <div className="chart-container">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={merged} margin={{ top: 32, right: hasRevenue ? 50 : 20, left: 10, bottom: 5 }}>
+        <ComposedChart data={merged} margin={{ top: 32, right: hasRevenue ? 50 : 20, left: 10, bottom: 5 }} onClick={handleChartClick} style={{ cursor: onDayClick ? 'pointer' : 'default' }}>
           <defs>
             <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={ct.line || '#3b82f6'} stopOpacity={0.15} />
               <stop offset="95%" stopColor={ct.line || '#3b82f6'} stopOpacity={0} />
             </linearGradient>
           </defs>
-
           <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} vertical={false} />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 11, fill: ct.axis }}
-            tickLine={false}
-            axisLine={{ stroke: ct.axisLine }}
+          <XAxis dataKey="date" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={{ stroke: ct.axisLine }}
             tickFormatter={(val) => {
               if (val.includes(' ')) return val.split(' ')[1];
               const d = new Date(val + 'T00:00:00');
               return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
             }}
           />
-          <YAxis
-            yAxisId="left"
-            tick={{ fontSize: 11, fill: ct.axis }}
-            tickLine={false}
-            axisLine={false}
-            width={40}
-          />
+          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={false} width={40} />
           {hasRevenue && (
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tick={{ fontSize: 11, fill: ct.axis }}
-              tickLine={false}
-              axisLine={false}
-              width={50}
-              tickFormatter={(v) => `$${(v / 100).toFixed(0)}`}
-            />
+            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
           )}
           <Tooltip
-            contentStyle={{
-              background: ct.tooltipBg,
-              border: `1px solid ${ct.tooltipBorder}`,
-              borderRadius: 8,
-              fontSize: 13,
-              color: ct.tooltipText,
-              boxShadow: ct.tooltipShadow,
-            }}
-            itemStyle={{ color: ct.tooltipText }}
-            labelStyle={{ color: ct.tooltipLabel, fontWeight: 600, marginBottom: 4 }}
-            formatter={(value, name, props) => {
-              if (name === 'revenue') return [`$${(value / 100).toFixed(2)}`, 'Revenue'];
-              if (name === 'visitors') return [value.toLocaleString(), 'Visitors'];
-              return [value.toLocaleString(), name];
-            }}
             content={(props) => {
               if (!props.active || !props.payload?.length) return null;
               const d = props.payload[0]?.payload;
               return (
-                <div style={{
-                  background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`,
-                  borderRadius: 8, padding: '10px 14px', fontSize: 13, color: ct.tooltipText,
-                  boxShadow: ct.tooltipShadow,
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, color: ct.tooltipLabel }}>
-                    {formatTooltipDate(d?.date)}
-                  </div>
+                <div style={{ background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: ct.tooltipText, boxShadow: ct.tooltipShadow }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6, color: ct.tooltipLabel }}>{formatTooltipDate(d?.date)}</div>
                   {props.payload.map((entry, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                       <span style={{ width: 10, height: 10, borderRadius: '50%', background: entry.color, display: 'inline-block' }} />
                       <span style={{ color: ct.tooltipText }}>
-                        {entry.name === 'revenue'
-                          ? `Revenue: $${(entry.value / 100).toFixed(2)}`
-                          : `Visitors: ${entry.value.toLocaleString()}`}
+                        {entry.name === 'revenue' ? `Revenue: $${(entry.value / 100).toFixed(2)}` : `Visitors: ${entry.value.toLocaleString()}`}
                       </span>
                     </div>
                   ))}
@@ -160,28 +113,8 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
               );
             }}
           />
-
-          {hasRevenue && (
-            <Bar
-              yAxisId="right"
-              dataKey="revenue"
-              fill={ct.barRevenue}
-              radius={[4, 4, 0, 0]}
-              barSize={20}
-              opacity={0.75}
-            />
-          )}
-
-          <Area
-            yAxisId="left"
-            type="monotone"
-            dataKey="visitors"
-            stroke={ct.line || '#3b82f6'}
-            strokeWidth={2}
-            fill="url(#visitorsGradient)"
-            dot={(props) => <SpikeDot {...props} ct={ct} />}
-            activeDot={{ r: 5, fill: ct.line || '#3b82f6' }}
-          />
+          {hasRevenue && <Bar yAxisId="right" dataKey="revenue" fill={ct.barRevenue} radius={[4, 4, 0, 0]} barSize={20} opacity={0.75} />}
+          <Area yAxisId="left" type="monotone" dataKey="visitors" stroke={ct.line || '#3b82f6'} strokeWidth={2} fill="url(#visitorsGradient)" dot={(props) => <SpikeDot {...props} ct={ct} />} activeDot={{ r: 5, fill: ct.line || '#3b82f6' }} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -210,26 +143,16 @@ function mergeByDate(traffic = [], revenue = [], dailySources = {}) {
   }
   for (const r of revenue) {
     const key = toDateKey(r.date);
-    if (map[key]) {
-      map[key].revenue = r.revenue || 0;
-    } else {
-      map[key] = { date: key, visitors: 0, sessions: 0, revenue: r.revenue || 0 };
-    }
+    if (map[key]) map[key].revenue = r.revenue || 0;
+    else map[key] = { date: key, visitors: 0, sessions: 0, revenue: r.revenue || 0 };
   }
-
   const entries = Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
-
-  // Detect spikes: days where visitors > 1.5x the period average
   const total = entries.reduce((s, e) => s + (e.visitors || 0), 0);
   const avg = entries.length > 0 ? total / entries.length : 0;
   const threshold = avg * 1.5;
-
   for (const entry of entries) {
     const src = dailySources[toDateKey(entry.date)];
-    if (src && (entry.visitors || 0) > threshold && threshold > 0) {
-      entry.spikeSrc = src.source;
-    }
+    if (src && (entry.visitors || 0) > threshold && threshold > 0) entry.spikeSrc = src.source;
   }
-
   return entries;
 }

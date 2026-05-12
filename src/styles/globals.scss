@@ -430,3 +430,44 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 .spike-panel-source-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .spike-panel-source-fill { height: 100%; background: var(--accent, #3b82f6); border-radius: 2px; min-width: 2px; }
 .spike-panel-source-count { width: 40px; text-align: right; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+// ── Chart fullscreen ──
+.chart-panel-fs {
+    position: fixed !important;
+    inset: 0;
+    z-index: 600;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+    margin: 0 !important;
+}
+
+.chart-container-fs {
+    flex: 1;
+    height: auto !important;
+    min-height: 0;
+}
+
+.chart-fs-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+
+    &:hover {
+        color: var(--text);
+        background: var(--bg-card-hover);
+    }
+}

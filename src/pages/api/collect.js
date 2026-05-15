@@ -93,7 +93,7 @@ export default async function handler(req, res) {
           data.pathname,
           data.referrer || null,
           referrerDomain,
-          data.utm_source || null,
+          data.utm_source || data.ref || data.source || data.via || null,
           data.utm_medium || null,
           data.utm_campaign || null,
           data.utm_term || null,
@@ -185,10 +185,10 @@ export default async function handler(req, res) {
         const visitorDelta = visitorToday ? 0 : 1;
         await run(
           `UPDATE daily_stats SET
-            sessions = sessions + 1,
+            sessions = sessions + ?,
             visitors = visitors + ?
            WHERE site_id = ? AND date = ?`,
-          [visitorDelta, data.site_id, today]
+          [1, visitorDelta, data.site_id, today]
         );
       }
     }

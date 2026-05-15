@@ -49,7 +49,7 @@
   function getUtm() {
     var p = new URLSearchParams(location.search);
     var u = {};
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach(function (k) {
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'source', 'via'].forEach(function (k) {
       var v = p.get(k);
       if (v) u[k] = v;
     });

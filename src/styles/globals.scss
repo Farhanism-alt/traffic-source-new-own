@@ -431,6 +431,33 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 .spike-panel-source-fill { height: 100%; background: var(--accent, #3b82f6); border-radius: 2px; min-width: 2px; }
 .spike-panel-source-count { width: 40px; text-align: right; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 
+// ── Map fullscreen ──
+.map-fs-overlay {
+    position: fixed !important;
+    inset: 0;
+    z-index: 600;
+    background: var(--bg-surface);
+}
+.map-fs-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    &:hover { color: var(--text); background: var(--bg-card-hover); }
+}
+
 // ── Chart fullscreen ──
 .chart-panel-fs {
     position: fixed !important;

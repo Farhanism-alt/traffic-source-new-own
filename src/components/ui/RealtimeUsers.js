@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { getCountryName } from '@/lib/formatters';
@@ -61,9 +61,17 @@ export default function RealtimeUsers({ countries = [] }) {
   const [data, setData] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
   const router = useRouter();
   const { siteId } = router.query;
   const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapFullscreen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMapFullscreen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mapFullscreen]);
 
   useEffect(() => {
     if (!siteId) return;
@@ -97,8 +105,25 @@ export default function RealtimeUsers({ countries = [] }) {
           {data.users.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', opacity: 0.5, fontSize: 13 }}>No active visitors right now</div>
           ) : (
-            <div style={{ position: 'relative', height: 300 }}>
+            <div className={mapFullscreen ? 'map-fs-overlay' : ''} style={mapFullscreen ? {} : { position: 'relative', height: 300 }}>
               <VisitorMap countries={countries} activeUsers={data.users} selectedUser={selectedUser} onUserClick={setSelectedUser} />
+              <button
+                className="map-fs-btn"
+                onClick={() => setMapFullscreen(f => !f)}
+                title={mapFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              >
+                {mapFullscreen ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
+                    <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                )}
+              </button>
               {selectedUser && (
                 <div className="visitor-card-overlay">
                   <VisitorCard user={selectedUser} onClose={() => setSelectedUser(null)} />

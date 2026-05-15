@@ -1,8 +1,6 @@
-import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Marker, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
+import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import Globe from 'react-globe.gl';
 import { useTheme } from '@/contexts/ThemeContext';
-import 'leaflet/dist/leaflet.css';
 
 const COUNTRY_COORDS = {
   US: [39.8, -98.5], CA: [56.1, -106.3], MX: [23.6, -102.5], BR: [-14.2, -51.9],
@@ -28,63 +26,104 @@ function seededJitter(seed, index, range) {
   return ((h % 10000) / 10000 - 0.5) * range * 2;
 }
 
-function createAvatarIcon(visitorId, selected) {
-  const seed = visitorId || 'unknown';
-  const border = selected ? '#f59e0b' : '#22c55e';
-  const src = `https://api.dicebear.com/9.x/micah/svg?seed=${encodeURIComponent(seed)}&size=32&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:32px;height:32px;border-radius:50%;overflow:hidden;border:2.5px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.25);background:#fff;"><img src="${src}" width="32" height="32" style="display:block;" /></div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-  });
-}
-
-function ThemeUpdater() {
-  const { theme } = useTheme();
-  const map = useMap();
-  useEffect(() => { map.invalidateSize(); }, [map, theme]);
-  return null;
-}
-
-function MapClickDismiss({ onDismiss }) {
-  useMapEvents({ click: onDismiss });
-  return null;
-}
-
 export default function VisitorMap({ countries = [], activeUsers = [], selectedUser, onUserClick }) {
+  const globeRef = useRef();
+  const containerRef = useRef();
   const { theme } = useTheme();
-  const tileUrl = theme === 'dark'
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  // Measure container
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({ width: Math.round(width), height: Math.round(height) });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Globe controls
+  useEffect(() => {
+    if (!globeRef.current) return;
+    const ctrl = globeRef.current.controls();
+    ctrl.autoRotate = true;
+    ctrl.autoRotateSpeed = 0.4;
+    ctrl.enableZoom = false;
+    ctrl.enablePan = false;
+  }, [size]);
+
+  const globeImageUrl = theme === 'dark'
+    ? '//unpkg.com/three-globe/example/img/earth-dark.jpg'
+    : '//unpkg.com/three-globe/example/img/earth-blue-marble.jpg';
+
+  const bgColor = theme === 'dark' ? 'rgba(27,27,28,1)' : 'rgba(245,245,245,1)';
+
   const maxCount = Math.max(...countries.map(c => c.count), 1);
-  const userPositions = useMemo(() => {
-    return activeUsers.filter(u => COUNTRY_COORDS[u.country]).map((u, i) => ({
-      ...u,
-      position: [
-        COUNTRY_COORDS[u.country][0] + seededJitter(u.visitor_id, i, 4),
-        COUNTRY_COORDS[u.country][1] + seededJitter(u.visitor_id, i + 1, 4),
-      ],
-    }));
-  }, [activeUsers]);
+
+  const pointsData = useMemo(() => countries
+    .filter(c => COUNTRY_COORDS[c.name])
+    .map(c => ({
+      lat: COUNTRY_COORDS[c.name][0],
+      lng: COUNTRY_COORDS[c.name][1],
+      radius: Math.max(0.25, (c.count / maxCount) * 1.6),
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [countries, maxCount]
+  );
+
+  const htmlData = useMemo(() =>
+    activeUsers
+      .filter(u => COUNTRY_COORDS[u.country])
+      .map((u, i) => ({
+        ...u,
+        lat: COUNTRY_COORDS[u.country][0] + seededJitter(u.visitor_id, i, 4),
+        lng: COUNTRY_COORDS[u.country][1] + seededJitter(u.visitor_id, i + 1, 4),
+        isSelected: selectedUser?.visitor_id === u.visitor_id,
+      })),
+    [activeUsers, selectedUser]
+  );
+
+  const getHtmlElement = useCallback((u) => {
+    const border = u.isSelected ? '#f59e0b' : '#22c55e';
+    const seed = u.visitor_id || 'unknown';
+    const src = `https://api.dicebear.com/9.x/micah/svg?seed=${encodeURIComponent(seed)}&size=32&backgroundType=gradientLinear&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+    const el = document.createElement('div');
+    el.style.cssText = `width:32px;height:32px;border-radius:50%;overflow:hidden;border:2.5px solid ${border};box-shadow:0 2px 8px rgba(0,0,0,0.3);background:#fff;cursor:pointer;`;
+    el.innerHTML = `<img src="${src}" width="32" height="32" style="display:block;" />`;
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (onUserClick) onUserClick(u.isSelected ? null : u);
+    });
+    return el;
+  }, [onUserClick]);
 
   return (
-    <MapContainer center={[20, 0]} zoom={2} scrollWheelZoom={false} style={{ width: '100%', height: '100%', background: theme === 'dark' ? '#1b1b1c' : '#f5f5f5' }} attributionControl={false} zoomControl={true}>
-      <TileLayer url={tileUrl} />
-      <ThemeUpdater />
-      {onUserClick && <MapClickDismiss onDismiss={() => onUserClick(null)} />}
-      {countries.filter(c => COUNTRY_COORDS[c.name]).map(c => {
-        const radius = Math.max(5, (c.count / maxCount) * 25);
-        return <CircleMarker key={c.name} center={COUNTRY_COORDS[c.name]} radius={radius} pathOptions={{ fillColor: '#3b82f6', fillOpacity: 0.35, color: '#3b82f6', weight: 1, opacity: 0.7 }} />;
-      })}
-      {userPositions.map((u, i) => {
-        const isSelected = selectedUser?.visitor_id === u.visitor_id;
-        return (
-          <Marker key={`active-${u.visitor_id || i}`} position={u.position} icon={createAvatarIcon(u.visitor_id, isSelected)}
-            eventHandlers={{ click: (e) => { e.originalEvent.stopPropagation(); if (onUserClick) onUserClick(isSelected ? null : u); } }}
-          />
-        );
-      })}
-    </MapContainer>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+      {size.width > 0 && (
+        <Globe
+          ref={globeRef}
+          width={size.width}
+          height={size.height}
+          globeImageUrl={globeImageUrl}
+          backgroundColor={bgColor}
+          atmosphereColor="#3b82f6"
+          atmosphereAltitude={0.12}
+          showGraticules={false}
+          pointsData={pointsData}
+          pointLat="lat"
+          pointLng="lng"
+          pointRadius="radius"
+          pointColor={() => '#3b82f6'}
+          pointAltitude={0.015}
+          pointResolution={12}
+          htmlElementsData={htmlData}
+          htmlLat="lat"
+          htmlLng="lng"
+          htmlElement={getHtmlElement}
+          onGlobeClick={() => { if (onUserClick) onUserClick(null); }}
+        />
+      )}
+    </div>
   );
 }

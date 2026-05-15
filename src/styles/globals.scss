@@ -498,3 +498,333 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
         background: var(--bg-card-hover);
     }
 }
+
+// ── New vs Returning Visitors ──
+.audience-strip {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.audience-strip-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.audience-strip-bar {
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    background: var(--border);
+}
+.audience-strip-bar-new { height: 100%; background: #3b82f6; transition: width 0.4s ease; }
+.audience-strip-bar-ret { height: 100%; background: var(--text-muted); opacity: 0.45; transition: width 0.4s ease; }
+.audience-strip-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.audience-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    strong { color: var(--text-heading); font-weight: 700; font-variant-numeric: tabular-nums; }
+}
+.audience-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3b82f6;
+    flex-shrink: 0;
+    &.ret { background: var(--text-muted); opacity: 0.55; }
+}
+.audience-pct { font-size: 12px; color: var(--text-muted); margin-left: 2px; }
+
+// ── Chart control buttons (compare + annotation) ──
+.chart-ctrl-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    &:hover { color: var(--text); background: var(--bg-card-hover); }
+    &.active { color: #3b82f6; border-color: #3b82f6; background: rgba(59, 130, 246, 0.08); }
+}
+
+// ── Annotation inline form ──
+.ann-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    animation: fadeIn 0.12s ease;
+}
+.ann-form-date {
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: var(--font);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    outline: none;
+    &:focus { border-color: var(--border-focus); }
+}
+.ann-form-note {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-family: var(--font);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    outline: none;
+    min-width: 0;
+    &:focus { border-color: var(--border-focus); }
+    &::placeholder { color: var(--text-muted); }
+}
+.ann-form-save {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font);
+    background: var(--text);
+    color: var(--btn-primary-text);
+    border: none;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    white-space: nowrap;
+    &:hover { opacity: 0.85; }
+}
+.ann-form-cancel {
+    background: none;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 4px;
+    &:hover { color: var(--text); }
+}
+
+// ── Custom Events table ──
+.events-table {
+    width: 100%;
+    border-collapse: collapse;
+    th { text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    td { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-card-hover); }
+}
+.events-num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-heading); }
+.event-name-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-right: 8px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+// ── Funnels page layout ──
+.funnels-layout { display: flex; gap: 20px; align-items: flex-start; }
+.funnels-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: sticky;
+    top: 76px;
+}
+.funnels-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+}
+.funnels-sidebar-title { font-size: 13px; font-weight: 600; color: var(--text-heading); }
+.funnels-new-btn {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    cursor: pointer;
+    padding: 4px 10px;
+    transition: background 0.12s, border-color 0.12s;
+    &:hover { background: var(--bg-card-hover); border-color: var(--hover-border); }
+}
+.funnels-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--font);
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s, color 0.1s;
+    &:last-child { border-bottom: none; }
+    &:hover { background: var(--bg-card-hover); color: var(--text); }
+    &.active { background: var(--accent-light); color: var(--text); font-weight: 600; }
+}
+.funnels-empty-hint { padding: 20px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.funnels-main { flex: 1; min-width: 0; }
+.funnels-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    gap: 16px;
+    color: var(--text-muted);
+    p { font-size: 13px; text-align: center; max-width: 300px; line-height: 1.6; }
+}
+
+// ── Funnel builder ──
+.funnel-builder {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+}
+.funnel-builder-title { font-size: 16px; font-weight: 700; color: var(--text-heading); margin-bottom: 20px; }
+.funnel-builder-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+    label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+}
+.funnel-builder-input {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: var(--font);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    outline: none;
+    width: 100%;
+    transition: border-color 0.12s;
+    &:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--focus-ring); }
+    &::placeholder { color: var(--text-muted); }
+}
+.funnel-builder-step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.funnel-step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.funnel-step-remove {
+    background: none;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 4px;
+    flex-shrink: 0;
+    &:hover { color: var(--danger); }
+}
+.funnel-add-step {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font);
+    color: var(--text-muted);
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-xs);
+    padding: 6px 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: color 0.12s, border-color 0.12s;
+    &:hover { color: var(--text); border-color: var(--hover-border); }
+}
+.funnel-builder-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+// ── Funnel visualization ──
+.funnel-results { padding: 20px 0; }
+.funnel-step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 0;
+}
+.funnel-step-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.funnel-step-path { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-heading); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.funnel-step-count { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+.funnel-step-pct { font-size: 13px; font-weight: 700; color: #3b82f6; white-space: nowrap; min-width: 44px; text-align: right; &.first { color: var(--text-muted); } }
+.funnel-step-bar-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.funnel-step-bar-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.4s ease; opacity: 0.75; }
+.funnel-dropoff {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.funnel-dropoff-arrow { font-size: 16px; color: var(--border-focus); flex-shrink: 0; }
+.funnel-dropoff-text { display: flex; align-items: center; gap: 4px; strong { color: var(--text); } }
+.funnel-dropoff-lost { color: var(--danger); }
+.funnel-summary {
+    margin-top: 16px;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--text-secondary);
+    strong { color: var(--text-heading); font-size: 16px; font-weight: 700; }
+}
+.funnel-view-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 16px;
+}
+.funnel-view-title { font-size: 18px; font-weight: 700; color: var(--text-heading); margin: 0; }

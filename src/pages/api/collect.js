@@ -1,4 +1,5 @@
 import { getRow, run } from '@/lib/db';
+import { normalizeSource } from '@/lib/sources';
 const UAParser = require('ua-parser-js');
 
 export const config = {
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
     let referrerDomain = null;
     if (data.referrer) {
       try {
-        referrerDomain = new URL(data.referrer).hostname;
+        referrerDomain = normalizeSource(new URL(data.referrer).hostname);
       } catch {
         // invalid referrer URL
       }

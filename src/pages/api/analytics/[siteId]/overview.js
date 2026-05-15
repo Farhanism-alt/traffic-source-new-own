@@ -1,6 +1,7 @@
 import { getRow, getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
+import { normalizeSource, getSourceDomains } from '@/lib/sources';
 
 const lastSyncAt = {};
 
@@ -17,8 +18,15 @@ function buildSessionFilters(query, alias = '') {
   const pfx = alias ? `${alias}.` : '';
   const clauses = [], params = [];
   if (query.channel) {
-    if (query.channel === 'Direct') clauses.push(`(${pfx}utm_source IS NULL AND (${pfx}referrer_domain IS NULL OR ${pfx}referrer_domain = ''))`);
-    else { clauses.push(`(${pfx}utm_source = ? OR ${pfx}referrer_domain = ?)`); params.push(query.channel, query.channel); }
+    if (query.channel === 'Direct') {
+      clauses.push(`(${pfx}utm_source IS NULL AND (${pfx}referrer_domain IS NULL OR ${pfx}referrer_domain = ''))`);
+    } else {
+      const aliases = getSourceDomains(query.channel);
+      const allVals = [query.channel, ...aliases];
+      const ph = allVals.map(() => '?').join(', ');
+      clauses.push(`(${pfx}utm_source IN (${ph}) OR ${pfx}referrer_domain IN (${ph}))`);
+      params.push(...allVals, ...allVals);
+    }
   }
   if (query.country) { clauses.push(`${pfx}country = ?`); params.push(query.country); }
   if (query.city) { clauses.push(`${pfx}city = ?`); params.push(query.city); }
@@ -142,12 +150,36 @@ export default withAuth(async function handler(req, res) {
 
   const [timeSeries, sources, pages, entryPages, exitPages, countries, cities, browsers, os, devices, convTotals, convBySource, convTimeSeries, affiliateBreakdown, rawDailySources] = await Promise.all([timeSeriesPromise, sourcesPromise, pagesPromise, entryPagesPromise, exitPagesPromise, countriesPromise, citiesPromise, browsersPromise, osPromise, devicesPromise, convTotalsPromise, convBySourcePromise, convTimeSeriesPromise, affiliateBreakdownPromise, rawDailySourcesPromise]);
 
+  // Normalize source names and merge duplicate rows that map to the same friendly name
+  function mergeSources(rows, countKey) {
+    const merged = new Map();
+    for (const row of rows) {
+      const name = normalizeSource(String(row.name)) || row.name;
+      if (merged.has(name)) {
+        const ex = merged.get(name);
+        if (countKey in row) ex[countKey] = Number(ex[countKey]) + Number(row[countKey]);
+        if ('visitors' in row) ex.visitors = Number(ex.visitors) + Number(row.visitors);
+        if ('conversions' in row) ex.conversions = Number(ex.conversions) + Number(row.conversions);
+        if ('revenue' in row) ex.revenue = Number(ex.revenue) + Number(row.revenue);
+      } else {
+        merged.set(name, { ...row, name });
+      }
+    }
+    return [...merged.values()].sort((a, b) => Number(b[countKey] ?? 0) - Number(a[countKey] ?? 0));
+  }
+
   const dailySources = {}, dailySourcesAll = {};
   for (const row of rawDailySources) {
     const dateKey = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date;
-    if (!dailySources[dateKey]) dailySources[dateKey] = { source: row.source, count: row.count };
+    const source = normalizeSource(row.source) || row.source;
+    const count = Number(row.count);
+    if (!dailySources[dateKey] || count > Number(dailySources[dateKey].count)) {
+      dailySources[dateKey] = { source, count };
+    }
     if (!dailySourcesAll[dateKey]) dailySourcesAll[dateKey] = [];
-    dailySourcesAll[dateKey].push({ source: row.source, count: Number(row.count) });
+    const existing = dailySourcesAll[dateKey].find(s => s.source === source);
+    if (existing) existing.count += count;
+    else dailySourcesAll[dateKey].push({ source, count });
   }
 
   const convRate = current.total_sessions > 0 ? ((convTotals.total_conversions / current.total_sessions) * 100).toFixed(2) : 0;
@@ -157,8 +189,8 @@ export default withAuth(async function handler(req, res) {
     site,
     current: { visitors: current.total_visitors, sessions: current.total_sessions, pageViews: current.total_page_views, bounceRate: parseFloat(bounceRate), avgDuration: Math.round(current.avg_duration) },
     changes: { visitors: parseFloat(pctChange(current.total_visitors, previous.total_visitors)), sessions: parseFloat(pctChange(current.total_sessions, previous.total_sessions)), pageViews: parseFloat(pctChange(current.total_page_views, previous.total_page_views)), bounceRate: parseFloat(pctChange(bounceRate, prevBounceRate)), avgDuration: parseFloat(pctChange(current.avg_duration, previous.avg_duration)) },
-    timeSeries, sources, pages, entryPages, exitPages, countries, cities, browsers, os, devices,
-    conversions: { totals: { conversions: convTotals.total_conversions, revenue: convTotals.total_revenue, avgValue: Math.round(convTotals.avg_value), conversionRate: parseFloat(convRate) }, bySource: convBySource, timeSeries: convTimeSeries },
+    timeSeries, sources: mergeSources(sources, 'sessions'), pages, entryPages, exitPages, countries, cities, browsers, os, devices,
+    conversions: { totals: { conversions: convTotals.total_conversions, revenue: convTotals.total_revenue, avgValue: Math.round(convTotals.avg_value), conversionRate: parseFloat(convRate) }, bySource: mergeSources(convBySource, 'conversions'), timeSeries: convTimeSeries },
     affiliates: affiliateBreakdown,
     dailySources,
     dailySourcesAll,

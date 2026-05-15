@@ -20,6 +20,8 @@ const DOMAIN_MAP = {
   youtube: 'youtube.com',
   tiktok: 'tiktok.com',
   pinterest: 'pinterest.com',
+  whatsapp: 'whatsapp.com',
+  telegram: 'telegram.org',
   github: 'github.com',
   medium: 'medium.com',
   hackernews: 'news.ycombinator.com',

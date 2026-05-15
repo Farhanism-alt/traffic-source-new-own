@@ -66,7 +66,7 @@
     data.referrer = document.referrer || '';
     data.screen_width = screen.width;
     data.screen_height = screen.height;
-    Object.assign(data, getUtm());
+    if (data.type !== 'event') Object.assign(data, getUtm());
 
     var ref = localStorage.getItem(REF_KEY);
     if (ref) data.ref = ref;
@@ -81,6 +81,30 @@
       xhr.send(payload);
     }
   }
+
+  // Custom event tracking — window.__ts.track('Button Click', { label: 'signup' })
+  function track(name, props) {
+    if (!name) return;
+    send({ type: 'event', name: String(name), props: props || {} });
+  }
+
+  // Auto-track outbound links and file downloads
+  var DOWNLOAD_EXTS = ['pdf', 'zip', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt', 'csv', 'mp4', 'mp3', 'dmg', 'exe', 'pkg'];
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('a[href]');
+    if (!el) return;
+    try {
+      var url = new URL(el.href, location.href);
+      if (url.hostname === location.hostname) return;
+      var parts = url.pathname.split('.');
+      var ext = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+      if (DOWNLOAD_EXTS.indexOf(ext) > -1) {
+        track('File Download', { url: url.href, type: ext });
+      } else {
+        track('Outbound Link', { url: url.href });
+      }
+    } catch (_) {}
+  }, true);
 
   // Track initial page view
   send({ type: 'pageview' });
@@ -108,6 +132,5 @@
     if (location.href !== lastUrl) { lastUrl = location.href; send({ type: 'pageview' }); }
   });
 
-  // Expose for Stripe integration
-  window.__ts = { vid: vid, sid: function () { return getSession(); } };
+  window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track };
 })();

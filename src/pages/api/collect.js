@@ -10,6 +10,23 @@ export const config = {
   },
 };
 
+let eventsReady = null;
+function ensureEventsTable() {
+  if (!eventsReady) {
+    eventsReady = run(`CREATE TABLE IF NOT EXISTS events (
+      id BIGSERIAL PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      session_id TEXT,
+      visitor_id TEXT,
+      name TEXT NOT NULL,
+      properties JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`).then(() => run(`CREATE INDEX IF NOT EXISTS idx_events_site_name_at ON events(site_id, name, created_at)`))
+      .catch(() => { eventsReady = null; });
+  }
+  return eventsReady;
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -33,6 +50,19 @@ export default async function handler(req, res) {
         data.session_id,
         data.site_id,
       ]);
+      return res.status(200).end();
+    }
+
+    // Custom event
+    if (data.type === 'event') {
+      if (!data.name) return res.status(400).end();
+      const site = await getRow('SELECT id FROM sites WHERE id = ?', [data.site_id]);
+      if (!site) return res.status(404).end();
+      await ensureEventsTable();
+      await run(
+        `INSERT INTO events (site_id, session_id, visitor_id, name, properties) VALUES (?, ?, ?, ?, ?)`,
+        [data.site_id, data.session_id, data.visitor_id, String(data.name).slice(0, 100), JSON.stringify(data.props || {})]
+      );
       return res.status(200).end();
     }
 

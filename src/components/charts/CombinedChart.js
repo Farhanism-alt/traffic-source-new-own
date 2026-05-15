@@ -7,9 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  defs,
-  linearGradient,
-  stop,
+  ReferenceLine,
 } from 'recharts';
 import { useChartTheme } from '@/hooks/useChartTheme';
 
@@ -51,15 +49,26 @@ function SpikeDot(props) {
   );
 }
 
-export default function CombinedChart({ trafficData, revenueData, dailySources = {}, onDayClick }) {
+function AnnotationLabel({ viewBox, note, ct }) {
+  const { x, y, height } = viewBox;
+  return (
+    <g>
+      <circle cx={x} cy={(y || 0) + (height || 0) - 8} r={6} fill="#f59e0b" opacity={0.9} />
+      <text x={x} y={(y || 0) + (height || 0) - 5} textAnchor="middle" fontSize={9} fill="#fff" fontWeight="700">!</text>
+    </g>
+  );
+}
+
+export default function CombinedChart({ trafficData, revenueData, dailySources = {}, onDayClick, compareData, annotations = [] }) {
   const ct = useChartTheme();
-  const merged = mergeByDate(trafficData, revenueData, dailySources);
+  const merged = mergeByDate(trafficData, revenueData, dailySources, compareData);
 
   if (!merged || merged.length === 0) {
     return <div className="empty-state"><p>No data for this period</p></div>;
   }
 
   const hasRevenue = merged.some((d) => d.revenue > 0);
+  const hasCompare = compareData && compareData.length > 0;
 
   const handleChartClick = (chartData) => {
     if (!onDayClick || !chartData?.activePayload?.[0]) return;
@@ -96,14 +105,18 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
               return (
                 <div style={{ background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: ct.tooltipText, boxShadow: ct.tooltipShadow }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, color: ct.tooltipLabel }}>{formatTooltipDate(d?.date)}</div>
-                  {props.payload.map((entry, i) => (
+                  {props.payload.filter(e => e.dataKey !== 'prevVisitors').map((entry, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                       <span style={{ width: 10, height: 10, borderRadius: '50%', background: entry.color, display: 'inline-block' }} />
-                      <span style={{ color: ct.tooltipText }}>
-                        {entry.name === 'revenue' ? `Revenue: $${(entry.value / 100).toFixed(2)}` : `Visitors: ${entry.value.toLocaleString()}`}
-                      </span>
+                      <span>{entry.name === 'revenue' ? `Revenue: $${(entry.value / 100).toFixed(2)}` : `Visitors: ${entry.value?.toLocaleString()}`}</span>
                     </div>
                   ))}
+                  {hasCompare && d?.prevVisitors !== undefined && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, opacity: 0.7 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: ct.axis, display: 'inline-block' }} />
+                      <span>Previous: {d.prevVisitors?.toLocaleString()}</span>
+                    </div>
+                  )}
                   {d?.spikeSrc && d.spikeSrc !== 'Direct' && (
                     <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${ct.tooltipBorder}`, fontSize: 12, color: ct.tooltipLabel, fontStyle: 'italic' }}>
                       Traffic spike from <strong>{d.spikeSrc}</strong>
@@ -113,8 +126,24 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
               );
             }}
           />
+          {/* Annotation reference lines */}
+          {annotations.map(ann => (
+            <ReferenceLine
+              key={ann.id}
+              x={String(ann.date).slice(0, 10)}
+              yAxisId="left"
+              stroke="#f59e0b"
+              strokeDasharray="4 2"
+              strokeWidth={1.5}
+              label={(props) => <AnnotationLabel {...props} note={ann.note} ct={ct} />}
+            />
+          ))}
           {hasRevenue && <Bar yAxisId="right" dataKey="revenue" fill={ct.barRevenue} radius={[4, 4, 0, 0]} barSize={20} opacity={0.75} />}
-          <Area yAxisId="left" type="monotone" dataKey="visitors" stroke={ct.line || '#3b82f6'} strokeWidth={2} fill="url(#visitorsGradient)" dot={(props) => <SpikeDot {...props} ct={ct} />} activeDot={{ r: 5, fill: ct.line || '#3b82f6' }} />
+          {/* Previous period comparison line */}
+          {hasCompare && (
+            <Area yAxisId="left" type="monotone" dataKey="prevVisitors" stroke={ct.axis} strokeWidth={1.5} strokeDasharray="5 3" fill="none" dot={false} activeDot={false} name="Previous" />
+          )}
+          <Area yAxisId="left" type="monotone" dataKey="visitors" stroke={ct.line || '#3b82f6'} strokeWidth={2} fill="url(#visitorsGradient)" dot={(props) => <SpikeDot {...props} ct={ct} />} activeDot={{ r: 5, fill: ct.line || '#3b82f6' }} name="Visitors" />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -135,7 +164,7 @@ function toDateKey(d) {
   return String(d).slice(0, 10);
 }
 
-function mergeByDate(traffic = [], revenue = [], dailySources = {}) {
+function mergeByDate(traffic = [], revenue = [], dailySources = {}, compareData) {
   const map = {};
   for (const t of traffic) {
     const key = toDateKey(t.date);
@@ -153,6 +182,13 @@ function mergeByDate(traffic = [], revenue = [], dailySources = {}) {
   for (const entry of entries) {
     const src = dailySources[toDateKey(entry.date)];
     if (src && (entry.visitors || 0) > threshold && threshold > 0) entry.spikeSrc = src.source;
+  }
+  // Align comparison data by index position
+  if (compareData && compareData.length > 0) {
+    const sorted = [...compareData].sort((a, b) => toDateKey(a.date).localeCompare(toDateKey(b.date)));
+    for (let i = 0; i < entries.length && i < sorted.length; i++) {
+      entries[i].prevVisitors = sorted[i].visitors || 0;
+    }
   }
   return entries;
 }

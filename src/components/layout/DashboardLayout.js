@@ -65,6 +65,12 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                     Affiliates
                   </Link>
                   <Link
+                    href={`/analytics/${siteId}/funnels`}
+                    className={`app-nav-link ${path.includes('/funnels') ? 'active' : ''}`}
+                  >
+                    Funnels
+                  </Link>
+                  <Link
                     href={`/analytics/${siteId}/gsc`}
                     className={`app-nav-link ${path.includes('/gsc') ? 'active' : ''}`}
                   >

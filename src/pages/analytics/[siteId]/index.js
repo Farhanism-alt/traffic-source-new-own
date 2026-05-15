@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -28,10 +28,12 @@ const FILTER_LABELS = {
 export default function Analytics() {
   const router = useRouter();
   const { siteId } = router.query;
-  const { data, loading } = useAnalytics('overview');
   const { filters, setFilter, removeFilter, clearFilters, hasFilters } = useFilters();
   const [spikeDay, setSpikeDay] = useState(null);
   const [chartFullscreen, setChartFullscreen] = useState(false);
+  const [compare, setCompare] = useState(false);
+  const [annForm, setAnnForm] = useState({ open: false, date: '', note: '' });
+  const { data, loading, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
 
   useEffect(() => {
     if (!chartFullscreen) return;
@@ -53,7 +55,6 @@ export default function Analytics() {
 
   const conv = data.conversions?.totals || {};
 
-  // Toggle filter: clicking the same value removes it, clicking a different one sets it
   const toggleFilter = (key, value) => {
     if (filters[key] === value) {
       removeFilter(key);
@@ -62,7 +63,17 @@ export default function Analytics() {
     }
   };
 
-  // Map tab keys to filter keys
+  const saveAnnotation = async () => {
+    if (!annForm.date || !annForm.note.trim()) return;
+    await fetch(`/api/analytics/${siteId}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: annForm.date, note: annForm.note.trim() }),
+    });
+    setAnnForm({ open: false, date: '', note: '' });
+    refetch();
+  };
+
   const sourceTabToFilter = { referrer: 'channel', utm_source: 'channel', utm_campaign: 'channel' };
   const geoTabToFilter = { country: 'country', city: 'city' };
   const pageTabToFilter = { all: 'page', entry: 'entry_page', exit: 'exit_page' };
@@ -75,7 +86,6 @@ export default function Analytics() {
       </Head>
       <DashboardLayout siteId={siteId} siteName={data.site?.name} siteDomain={data.site?.domain}>
 
-        {/* ── Active Filters Bar ── */}
         {hasFilters && (
           <div className="filter-bar">
             <span className="filter-bar-label">Filtered by:</span>
@@ -100,10 +110,8 @@ export default function Analytics() {
           </div>
         )}
 
-        {/* ── Realtime Active Users ── */}
         <RealtimeUsers countries={data.countries || []} />
 
-        {/* ── Metrics Strip ── */}
         <MetricStrip metrics={[
           { label: 'Visitors', value: data.current.visitors, change: data.changes.visitors },
           { label: 'Pageviews', value: data.current.pageViews, change: data.changes.pageViews },
@@ -113,37 +121,96 @@ export default function Analytics() {
           { label: 'Session time', value: data.current.avgDuration, change: data.changes.avgDuration, format: 'duration' },
         ]} />
 
-        {/* ── Combined Chart (visitors line + revenue bars) ── */}
+        {(data.newVisitors > 0 || data.returningVisitors > 0) && (() => {
+          const total = (data.newVisitors || 0) + (data.returningVisitors || 0);
+          const newPct = total > 0 ? Math.round((data.newVisitors / total) * 100) : 0;
+          const retPct = 100 - newPct;
+          return (
+            <div className="audience-strip">
+              <div className="audience-strip-label">Audience</div>
+              <div className="audience-strip-bar">
+                <div className="audience-strip-bar-new" style={{ width: `${newPct}%` }} title={`New: ${newPct}%`} />
+                <div className="audience-strip-bar-ret" style={{ width: `${retPct}%` }} title={`Returning: ${retPct}%`} />
+              </div>
+              <div className="audience-strip-stats">
+                <span className="audience-stat new">
+                  <span className="audience-dot" />
+                  <strong>{(data.newVisitors || 0).toLocaleString()}</strong>
+                  <span>New visitors</span>
+                  <span className="audience-pct">{newPct}%</span>
+                </span>
+                <span className="audience-stat ret">
+                  <span className="audience-dot ret" />
+                  <strong>{(data.returningVisitors || 0).toLocaleString()}</strong>
+                  <span>Returning</span>
+                  <span className="audience-pct">{retPct}%</span>
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         <div
           className={chartFullscreen ? 'panel chart-panel-fs' : 'panel'}
           style={chartFullscreen ? {} : { marginBottom: spikeDay ? 0 : 20, position: 'relative' }}
         >
-          <button
-            className="chart-fs-btn"
-            onClick={() => setChartFullscreen(f => !f)}
-            title={chartFullscreen ? 'Exit fullscreen (Esc)' : 'View fullscreen'}
-          >
-            {chartFullscreen ? (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 6 }}>
+            <button
+              className={`chart-ctrl-btn${compare ? ' active' : ''}`}
+              onClick={() => setCompare(c => !c)}
+              title="Compare to previous period"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
-            ) : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </button>
+            <button
+              className="chart-ctrl-btn"
+              onClick={() => setAnnForm(f => ({ ...f, open: !f.open, date: new Date().toISOString().slice(0, 10) }))}
+              title="Add annotation"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-            )}
-          </button>
+            </button>
+            <button
+              className="chart-fs-btn"
+              onClick={() => setChartFullscreen(f => !f)}
+              title={chartFullscreen ? 'Exit fullscreen (Esc)' : 'View fullscreen'}
+              style={{ position: 'static' }}
+            >
+              {chartFullscreen ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                </svg>
+              )}
+            </button>
+          </div>
+          {annForm.open && (
+            <div className="ann-form">
+              <input type="date" className="ann-form-date" value={annForm.date} onChange={e => setAnnForm(f => ({ ...f, date: e.target.value }))} />
+              <input type="text" className="ann-form-note" placeholder="Add a note…" value={annForm.note} onChange={e => setAnnForm(f => ({ ...f, note: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') saveAnnotation(); if (e.key === 'Escape') setAnnForm({ open: false, date: '', note: '' }); }} autoFocus maxLength={200} />
+              <button className="ann-form-save" onClick={saveAnnotation}>Save</button>
+              <button className="ann-form-cancel" onClick={() => setAnnForm({ open: false, date: '', note: '' })}>×</button>
+            </div>
+          )}
           <div className={chartFullscreen ? 'chart-container chart-container-fs' : 'chart-container'}>
             <CombinedChart
               trafficData={data.timeSeries}
               revenueData={data.conversions?.timeSeries || []}
               dailySources={data.dailySources || {}}
+              compareData={compare ? (data.prevTimeSeries || []) : undefined}
+              annotations={data.annotations || []}
               onDayClick={(date, dayData) => setSpikeDay(prev => prev?.date === date ? null : { date, dayData })}
             />
           </div>
         </div>
 
-        {/* ── Spike Attribution Panel ── */}
         {spikeDay && (() => {
           const sources = (data.dailySourcesAll || {})[spikeDay.date] || [];
           const dayVisitors = spikeDay.dayData?.visitors || 0;
@@ -200,7 +267,6 @@ export default function Analytics() {
           );
         })()}
 
-        {/* ── Sources + Geography (side by side) ── */}
         <div className="grid-2">
           <AnalyticsPanel
             tabs={[
@@ -251,7 +317,6 @@ export default function Analytics() {
           />
         </div>
 
-        {/* ── Pages + Browsers (side by side) ── */}
         <div className="grid-2">
           <AnalyticsPanel
             tabs={[
@@ -302,7 +367,34 @@ export default function Analytics() {
           />
         </div>
 
-        {/* ── Affiliates ── */}
+        {data.topEvents?.length > 0 && (
+          <div className="panel" style={{ marginBottom: 20 }}>
+            <div className="panel-header">
+              <div className="panel-tabs"><button className="panel-tab active">Events</button></div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-tracked + custom</span>
+            </div>
+            <div className="panel-body">
+              <table className="events-table">
+                <thead>
+                  <tr><th>Event</th><th>Total</th><th>Unique visitors</th></tr>
+                </thead>
+                <tbody>
+                  {data.topEvents.map((ev, i) => (
+                    <tr key={i}>
+                      <td>
+                        <span className="event-name-dot" />
+                        {ev.name}
+                      </td>
+                      <td className="events-num">{Number(ev.count).toLocaleString()}</td>
+                      <td className="events-num">{Number(ev.unique_visitors).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {data.affiliates?.length > 0 && (
           <div className="panel" style={{ marginBottom: 20 }}>
             <div className="panel-header">
@@ -341,7 +433,6 @@ export default function Analytics() {
           </div>
         )}
 
-        {/* ── Journey for Payment ── */}
         {data.conversions?.bySource?.length > 0 && (
           <div className="panel" style={{ marginBottom: 20 }}>
             <div className="panel-header">

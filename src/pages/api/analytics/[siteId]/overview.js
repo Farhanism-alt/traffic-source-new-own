@@ -55,7 +55,7 @@ export default withAuth(async function handler(req, res) {
   const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  syncPaymentsForSite(siteId); // fire-and-forget: don't block the response
+  syncPaymentsForSite(siteId);
 
   const range = parseDateRange(req.query);
   const dateEnd = range.to + ' 23:59:59';
@@ -148,9 +148,45 @@ export default withAuth(async function handler(req, res) {
 
   const rawDailySourcesPromise = getRows(`SELECT DATE(started_at) as date, COALESCE(utm_source, referrer_domain, 'Direct') as source, COUNT(*) as count FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ? GROUP BY DATE(started_at), COALESCE(utm_source, referrer_domain, 'Direct') ORDER BY date, count DESC`, [siteId, range.from, dateEnd]);
 
-  const [timeSeries, sources, pages, entryPages, exitPages, countries, cities, browsers, os, devices, convTotals, convBySource, convTimeSeries, affiliateBreakdown, rawDailySources] = await Promise.all([timeSeriesPromise, sourcesPromise, pagesPromise, entryPagesPromise, exitPagesPromise, countriesPromise, citiesPromise, browsersPromise, osPromise, devicesPromise, convTotalsPromise, convBySourcePromise, convTimeSeriesPromise, affiliateBreakdownPromise, rawDailySourcesPromise]);
+  const newReturningPromise = getRow(`
+    WITH period_vids AS (
+      SELECT DISTINCT visitor_id FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ?
+    )
+    SELECT
+      COUNT(CASE WHEN NOT EXISTS (
+        SELECT 1 FROM sessions s2 WHERE s2.site_id = ? AND s2.visitor_id = pv.visitor_id AND s2.started_at < ?
+      ) THEN 1 END) as new_visitors,
+      COUNT(CASE WHEN EXISTS (
+        SELECT 1 FROM sessions s2 WHERE s2.site_id = ? AND s2.visitor_id = pv.visitor_id AND s2.started_at < ?
+      ) THEN 1 END) as returning_visitors
+    FROM period_vids pv
+  `, [siteId, range.from, dateEnd, siteId, range.from, siteId, range.from]).catch(() => null);
 
-  // Normalize source names and merge duplicate rows that map to the same friendly name
+  const topEventsPromise = getRows(`
+    SELECT name, COUNT(*) as count, COUNT(DISTINCT visitor_id) as unique_visitors
+    FROM events WHERE site_id = ? AND created_at BETWEEN ? AND ?
+    GROUP BY name ORDER BY count DESC LIMIT 10
+  `, [siteId, range.from, dateEnd]).catch(() => []);
+
+  const annotationsPromise = getRows(`
+    SELECT id, date::text as date, note FROM annotations
+    WHERE site_id = ? AND date BETWEEN ? AND ? ORDER BY date
+  `, [siteId, range.from, range.to]).catch(() => []);
+
+  let prevTimeSeriesPromise = Promise.resolve([]);
+  if (req.query.compare === '1') {
+    if (useSessionFilters || usePageFilter) {
+      const sessionJoinPv2 = usePageFilter ? `INNER JOIN page_views pv ON pv.site_id = s.site_id AND pv.session_id = s.id` : '';
+      const pvClause2 = usePageFilter ? ` AND pv.pathname = ?` : '';
+      const pvP2 = usePageFilter ? [req.query.page] : [];
+      prevTimeSeriesPromise = getRows(`SELECT DATE(s.started_at) as date, COUNT(DISTINCT s.visitor_id) as visitors, COUNT(DISTINCT s.id) as sessions FROM sessions s ${sessionJoinPv2} WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvClause2} GROUP BY date ORDER BY date`, [siteId, prevRange.from, prevRange.to + ' 23:59:59', ...sfAliased.params, ...pvP2]).catch(() => []);
+    } else {
+      prevTimeSeriesPromise = getRows(`SELECT date, visitors, sessions FROM daily_stats WHERE site_id = ? AND date BETWEEN ? AND ? ORDER BY date`, [siteId, prevRange.from, prevRange.to]).catch(() => []);
+    }
+  }
+
+  const [timeSeries, sources, pages, entryPages, exitPages, countries, cities, browsers, os, devices, convTotals, convBySource, convTimeSeries, affiliateBreakdown, rawDailySources, newReturning, topEvents, annotations, prevTimeSeries] = await Promise.all([timeSeriesPromise, sourcesPromise, pagesPromise, entryPagesPromise, exitPagesPromise, countriesPromise, citiesPromise, browsersPromise, osPromise, devicesPromise, convTotalsPromise, convBySourcePromise, convTimeSeriesPromise, affiliateBreakdownPromise, rawDailySourcesPromise, newReturningPromise, topEventsPromise, annotationsPromise, prevTimeSeriesPromise]);
+
   function mergeSources(rows, countKey) {
     const merged = new Map();
     for (const row of rows) {
@@ -194,5 +230,10 @@ export default withAuth(async function handler(req, res) {
     affiliates: affiliateBreakdown,
     dailySources,
     dailySourcesAll,
+    newVisitors: Number(newReturning?.new_visitors || 0),
+    returningVisitors: Number(newReturning?.returning_visitors || 0),
+    topEvents,
+    annotations,
+    prevTimeSeries: req.query.compare === '1' ? prevTimeSeries : undefined,
   });
 });

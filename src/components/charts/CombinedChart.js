@@ -94,7 +94,7 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
               return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
             }}
           />
-          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={false} width={40} />
+          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={false} width={40} allowDecimals={false} domain={[0, (dataMax) => Math.max(dataMax + 1, 2)]} />
           {hasRevenue && (
             <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: ct.axis }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
           )}

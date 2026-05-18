@@ -158,7 +158,7 @@ export default function FunnelsPage() {
                         placeholder={i === 0 ? '/pricing' : i === 1 ? '/checkout' : '/thank-you'}
                       />
                       {buildSteps.length > 2 && (
-                        <button className="funnel-step-remove" onClick={() => setBuildSteps(buildSteps.filter((_, j) => j !== i))}×</button>
+                        <button className="funnel-step-remove" onClick={() => setBuildSteps(buildSteps.filter((_, j) => j !== i))}>×</button>
                       )}
                     </div>
                   ))}

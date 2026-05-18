@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function Settings() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('profile');
+  const [tab, setTab] = useState('billing');
   const [name, setName] = useState(user?.name || '');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -28,12 +28,14 @@ export default function Settings() {
           <div className="panel" style={{ marginBottom: 24 }}>
             <div className="panel-header">
               <div className="panel-tabs">
+                <button className={`panel-tab ${tab === 'billing' ? 'active' : ''}`} onClick={() => setTab('billing')}>Billing</button>
                 <button className={`panel-tab ${tab === 'profile' ? 'active' : ''}`} onClick={() => setTab('profile')}>Profile</button>
                 <button className={`panel-tab ${tab === 'integrations' ? 'active' : ''}`} onClick={() => setTab('integrations')}>Integrations</button>
                 <button className={`panel-tab ${tab === 'backups' ? 'active' : ''}`} onClick={() => setTab('backups')}>Backups</button>
               </div>
             </div>
             <div className="panel-body" style={{ padding: 20 }}>
+              {tab === 'billing' && <BillingSettings />}
               {tab === 'profile' && (
                 <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {message && (
@@ -687,6 +689,144 @@ function BackupSettings() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+const PLAN_FEATURES = {
+  free: ['1 site', 'Basic analytics', 'Traffic sources', 'Pages & countries', 'Real-time visitors'],
+  pro: ['Unlimited sites', 'Everything in Free', 'Custom events & funnels', 'Date comparison', 'Chart annotations', 'New vs returning visitors', 'Outbound link tracking', 'Priority support'],
+  business: ['Everything in Pro', 'Team members', 'White-label reports', 'API access', 'Dedicated support'],
+};
+
+function BillingSettings() {
+  const [billing, setBilling] = useState(null);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = async () => {
+    const r = await fetch('/api/billing');
+    if (r.ok) setBilling(await r.json());
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const activate = async (e) => {
+    e.preventDefault();
+    if (!licenseKey.trim()) return;
+    setSaving(true); setErr(''); setMsg('');
+    const r = await fetch('/api/billing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ licenseKey }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setMsg(`${d.planName} plan activated successfully!`);
+      setLicenseKey('');
+      setBilling(d);
+    } else {
+      setErr(d.error || 'Activation failed');
+    }
+    setSaving(false);
+  };
+
+  const deactivate = async () => {
+    if (!confirm('Downgrade to Free plan?')) return;
+    setSaving(true);
+    const r = await fetch('/api/billing', { method: 'DELETE' });
+    if (r.ok) {
+      setBilling(await r.json());
+      setMsg('Downgraded to Free plan.');
+    }
+    setSaving(false);
+  };
+
+  if (!billing) return <div className="loading-inline"><div className="loading-spinner" /></div>;
+
+  const isPaid = billing.plan !== 'free';
+  const features = PLAN_FEATURES[billing.plan] || PLAN_FEATURES.free;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 16 }}>Subscription Plan</h3>
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+          Enter your license key to activate your plan.
+        </p>
+      </div>
+
+      {msg && <div style={{ background: 'var(--success-light)', color: 'var(--success)', padding: '10px 14px', borderRadius: 'var(--radius)', fontSize: 13 }}>{msg}</div>}
+      {err && <div className="auth-error">{err}</div>}
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
+        background: isPaid ? 'rgba(59,130,246,0.05)' : 'var(--bg)',
+        border: `1px solid ${isPaid ? '#3b82f6' : 'var(--border)'}`,
+        borderRadius: 'var(--radius)',
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{
+              fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
+              background: isPaid ? '#3b82f6' : 'var(--bg-elevated)',
+              color: isPaid ? '#fff' : 'var(--text-muted)',
+            }}>
+              {billing.planName}
+            </span>
+            {isPaid && billing.price > 0 && (
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>${billing.price}/month</span>
+            )}
+          </div>
+          {billing.activatedAt && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Activated {new Date(billing.activatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
+          )}
+        </div>
+        {isPaid && (
+          <button className="btn btn-secondary btn-sm" onClick={deactivate} disabled={saving}>
+            Downgrade
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {isPaid ? 'Your plan includes' : 'Free plan includes'}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {features.map((f) => (
+            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <span style={{ color: '#3b82f6', fontWeight: 700, fontSize: 15 }}>✓</span>
+              {f}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <form onSubmit={activate} style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+          {isPaid ? 'Update license key' : 'Activate your license'}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Enter the license key from your purchase email (starts with <code style={{ fontSize: 12 }}>PRO-</code> or <code style={{ fontSize: 12 }}>BIZ-</code>).
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={licenseKey}
+            onChange={(e) => setLicenseKey(e.target.value)}
+            placeholder="PRO-XXXX-XXXX-XXXX"
+            style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-mono)' }}
+          />
+          <button type="submit" className="btn btn-primary" disabled={saving || !licenseKey.trim()}>
+            {saving ? 'Activating…' : 'Activate'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

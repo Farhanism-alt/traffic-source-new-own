@@ -38,19 +38,25 @@ export default function Analytics() {
   const { data, loading, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
 
   const syncPayments = useCallback(async () => {
-    if (syncing) return;
+    if (syncing || !siteId) return;
     setSyncing(true);
     setSyncMsg('');
     try {
       const r = await fetch(`/api/analytics/${siteId}/sync-payments`, { method: 'POST' });
-      const d = await r.json();
-      setSyncMsg(d.newConversions > 0 ? `Synced ${d.newConversions} new payment${d.newConversions === 1 ? '' : 's'}` : 'No new payments found');
-      if (d.newConversions > 0) refetch();
-    } catch {
-      setSyncMsg('Sync failed');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setSyncMsg(d.error || `Error ${r.status}`);
+      } else {
+        setSyncMsg(d.newConversions > 0
+          ? `Synced ${d.newConversions} new payment${d.newConversions === 1 ? '' : 's'}`
+          : 'No new payments found');
+        if (d.newConversions > 0) refetch();
+      }
+    } catch (e) {
+      setSyncMsg(e.message || 'Network error');
     }
     setSyncing(false);
-    setTimeout(() => setSyncMsg(''), 4000);
+    setTimeout(() => setSyncMsg(''), 6000);
   }, [siteId, syncing, refetch]);
 
   useEffect(() => {
@@ -60,11 +66,33 @@ export default function Analytics() {
     return () => document.removeEventListener('keydown', onKey);
   }, [chartFullscreen]);
 
+  const syncButton = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {syncMsg && (
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {syncMsg}
+        </span>
+      )}
+      <button
+        onClick={syncPayments}
+        disabled={syncing || !siteId}
+        title="Sync payments from Stripe / LemonSqueezy / Dodo"
+        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={syncing ? { animation: 'spin 1s linear infinite' } : {}}>
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        {syncing ? 'Running sync…' : 'Sync payments'}
+      </button>
+    </div>
+  );
+
   if (loading || !data) {
     return (
       <>
         <Head><title>Analytics - Traffic Source</title></Head>
-        <DashboardLayout siteId={siteId}>
+        <DashboardLayout siteId={siteId} headerActions={syncButton}>
           <div className="loading-inline"><div className="loading-spinner" /></div>
         </DashboardLayout>
       </>
@@ -102,7 +130,7 @@ export default function Analytics() {
       <Head>
         <title>{data.site?.name || 'Analytics'} - Traffic Source</title>
       </Head>
-      <DashboardLayout siteId={siteId} siteName={data.site?.name} siteDomain={data.site?.domain}>
+      <DashboardLayout siteId={siteId} siteName={data.site?.name} siteDomain={data.site?.domain} headerActions={syncButton}>
 
         {hasFilters && (
           <div className="filter-bar">
@@ -130,31 +158,14 @@ export default function Analytics() {
 
         <RealtimeUsers countries={data.countries || []} />
 
-        <div style={{ position: 'relative' }}>
-          <MetricStrip metrics={[
-            { label: 'Visitors', value: data.current.visitors, change: data.changes.visitors },
-            { label: 'Pageviews', value: data.current.pageViews, change: data.changes.pageViews },
-            { label: 'Revenue', value: conv.revenue || 0, format: 'currency' },
-            { label: 'Conversion rate', value: conv.conversionRate || 0, format: 'percent' },
-            { label: 'Bounce rate', value: data.current.bounceRate, change: data.changes.bounceRate, format: 'percent' },
-            { label: 'Session time', value: data.current.avgDuration, change: data.changes.avgDuration, format: 'duration' },
-          ]} />
-          <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {syncMsg && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{syncMsg}</span>}
-            <button
-              onClick={syncPayments}
-              disabled={syncing}
-              title="Sync payments from Stripe / LemonSqueezy / Dodo"
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={syncing ? { animation: 'spin 1s linear infinite' } : {}}>
-                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-              {syncing ? 'Syncing…' : 'Sync payments'}
-            </button>
-          </div>
-        </div>
+        <MetricStrip metrics={[
+          { label: 'Visitors', value: data.current.visitors, change: data.changes.visitors },
+          { label: 'Pageviews', value: data.current.pageViews, change: data.changes.pageViews },
+          { label: 'Revenue', value: conv.revenue || 0, format: 'currency' },
+          { label: 'Conversion rate', value: conv.conversionRate || 0, format: 'percent' },
+          { label: 'Bounce rate', value: data.current.bounceRate, change: data.changes.bounceRate, format: 'percent' },
+          { label: 'Session time', value: data.current.avgDuration, change: data.changes.avgDuration, format: 'duration' },
+        ]} />
 
         {(data.newVisitors > 0 || data.returningVisitors > 0) && (() => {
           const total = (data.newVisitors || 0) + (data.returningVisitors || 0);

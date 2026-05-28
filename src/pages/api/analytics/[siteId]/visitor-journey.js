@@ -8,21 +8,19 @@ export default withAuth(async function handler(req, res) {
   }
 
   const { siteId, visitorId, conversionId } = req.query;
-  if (!visitorId) {
-    return res.status(400).json({ error: 'visitorId is required' });
-  }
 
   const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  // Get the conversion record
+  // Look up conversion — by id+site_id only (no visitor_id requirement so
+  // payments synced without ts_visitor_id metadata still show the correct amount)
   let conversion = null;
   if (conversionId) {
     conversion = await getRow(
-      `SELECT * FROM conversions WHERE id = ? AND site_id = ? AND visitor_id = ?`,
-      [conversionId, siteId, visitorId]
+      `SELECT * FROM conversions WHERE id = ? AND site_id = ?`,
+      [conversionId, siteId]
     );
-  } else {
+  } else if (visitorId) {
     conversion = await getRow(
       `SELECT * FROM conversions
        WHERE site_id = ? AND visitor_id = ? AND status = 'completed'
@@ -31,28 +29,36 @@ export default withAuth(async function handler(req, res) {
     );
   }
 
-  // Get ALL sessions and page views in parallel
-  const [sessions, pageViews] = await Promise.all([
-    getRows(
-      `SELECT id, started_at, last_activity, entry_page, exit_page,
-              country, city, browser, os, device_type,
-              referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
-              page_count, duration, is_bounce
-       FROM sessions
-       WHERE site_id = ? AND visitor_id = ?
-       ORDER BY started_at ASC
-       LIMIT 50`,
-      [siteId, visitorId]
-    ),
-    getRows(
-      `SELECT id, session_id, pathname, hostname, querystring, timestamp
-       FROM page_views
-       WHERE site_id = ? AND visitor_id = ?
-       ORDER BY timestamp ASC
-       LIMIT 500`,
-      [siteId, visitorId]
-    ),
-  ]);
+  // Use the visitor_id from the query OR fall back to what's on the conversion row
+  const effectiveVisitorId = (visitorId && visitorId !== 'null') ? visitorId : (conversion?.visitor_id || null);
+
+  // Sessions and page views only when we have a real visitor id to look up
+  let sessions = [];
+  let pageViews = [];
+
+  if (effectiveVisitorId) {
+    [sessions, pageViews] = await Promise.all([
+      getRows(
+        `SELECT id, started_at, last_activity, entry_page, exit_page,
+                country, city, browser, os, device_type,
+                referrer, referrer_domain, utm_source, utm_medium, utm_campaign,
+                page_count, duration, is_bounce
+         FROM sessions
+         WHERE site_id = ? AND visitor_id = ?
+         ORDER BY started_at ASC
+         LIMIT 50`,
+        [siteId, effectiveVisitorId]
+      ),
+      getRows(
+        `SELECT id, session_id, pathname, hostname, querystring, timestamp
+         FROM page_views
+         WHERE site_id = ? AND visitor_id = ?
+         ORDER BY timestamp ASC
+         LIMIT 500`,
+        [siteId, effectiveVisitorId]
+      ),
+    ]);
+  }
 
   // Group page views by session
   const pageViewsBySession = {};
@@ -79,7 +85,7 @@ export default withAuth(async function handler(req, res) {
 
   res.status(200).json({
     visitor: {
-      id: visitorId,
+      id: effectiveVisitorId,
       totalSessions: sessions.length,
       totalPageViews: pageViews.length,
       firstVisit: sessions[0]?.started_at || null,

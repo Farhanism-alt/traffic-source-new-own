@@ -14,7 +14,7 @@ const periods = [
   { value: '12m', label: '1Y' },
 ];
 
-export default function DashboardLayout({ children, siteId, siteName, siteDomain }) {
+export default function DashboardLayout({ children, siteId, siteName, siteDomain, headerActions }) {
   const { period, setPeriod, customRange, setCustomRange } = useDateRange();
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -169,6 +169,7 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                     }}
                   />
                 </div>
+                {headerActions}
               </div>
             </div>
           )}

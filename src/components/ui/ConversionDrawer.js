@@ -38,10 +38,8 @@ export default function ConversionDrawer({ siteId, conversion, onClose }) {
   useEffect(() => {
     if (!conversion) { setData(null); return; }
     setLoading(true);
-    const params = new URLSearchParams({
-      visitorId: conversion.visitor_id,
-      conversionId: String(conversion.id),
-    });
+    const params = new URLSearchParams({ conversionId: String(conversion.id) });
+    if (conversion.visitor_id) params.set('visitorId', conversion.visitor_id);
     fetch(`/api/analytics/${siteId}/visitor-journey?${params}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => setData(d))
@@ -115,6 +113,13 @@ export default function ConversionDrawer({ siteId, conversion, onClose }) {
               </div>
 
               <div className="drawer-timeline">
+                {data.sessions.length === 0 && (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
+                    No browsing sessions recorded for this customer.
+                    <br />
+                    <span style={{ fontSize: 12 }}>Pass <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>ts_visitor_id</code> in checkout metadata to link sessions.</span>
+                  </div>
+                )}
                 {data.sessions.map((session, idx) => (
                   <div key={session.id} className="timeline-session">
                     <div className="timeline-track">

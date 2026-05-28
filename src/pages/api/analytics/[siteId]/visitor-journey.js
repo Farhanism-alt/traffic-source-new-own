@@ -1,6 +1,7 @@
 import { getRow, getRows } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { verifySiteOwnership } from '@/lib/analytics';
+import { lookupVisitorByEmail } from '@/lib/visitor-identity';
 
 export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -29,8 +30,11 @@ export default withAuth(async function handler(req, res) {
     );
   }
 
-  // Use the visitor_id from the query OR fall back to what's on the conversion row
-  const effectiveVisitorId = (visitorId && visitorId !== 'null') ? visitorId : (conversion?.visitor_id || null);
+  // Use the visitor_id from the query, then from the conversion row, then from email identity lookup
+  let effectiveVisitorId = (visitorId && visitorId !== 'null') ? visitorId : (conversion?.visitor_id || null);
+  if (!effectiveVisitorId && conversion?.stripe_customer_email) {
+    effectiveVisitorId = await lookupVisitorByEmail(siteId, conversion.stripe_customer_email);
+  }
 
   // Sessions and page views only when we have a real visitor id to look up
   let sessions = [];

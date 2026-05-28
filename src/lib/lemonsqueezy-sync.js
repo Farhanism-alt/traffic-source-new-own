@@ -1,4 +1,5 @@
 import { getRow, getRows, run } from './db';
+import { lookupVisitorByEmail } from './visitor-identity';
 
 const LS_API_BASE = 'https://api.lemonsqueezy.com/v1';
 
@@ -58,8 +59,14 @@ export async function syncLemonSqueezyPayments() {
 
           // Extract visitor/session IDs from custom_data
           const customData = attrs.custom_data || {};
-          const visitorId = customData.ts_visitor_id || null;
+          let visitorId = customData.ts_visitor_id || null;
           let sessionId = customData.ts_session_id || null;
+
+          // Fallback: match by customer email via visitor_identities
+          const customerEmail = attrs.user_email || null;
+          if (!visitorId && customerEmail) {
+            visitorId = await lookupVisitorByEmail(site.id, customerEmail);
+          }
 
           // Attribution
           let utmSource = null, utmMedium = null, utmCampaign = null, referrerDomain = null;

@@ -88,6 +88,27 @@
     send({ type: 'event', name: String(name), props: props || {} });
   }
 
+  // Manual identify — window.__ts.identify('user@example.com')
+  function identify(email) {
+    if (!email || String(email).indexOf('@') < 1) return;
+    send({ type: 'identify', email: String(email).trim().toLowerCase() });
+  }
+
+  // Auto-detect email from any form submission (signup, checkout, newsletter, etc.)
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || form.tagName !== 'FORM') return;
+    var emailEl = form.querySelector('input[type="email"]') ||
+      form.querySelector('input[name="email"]') ||
+      form.querySelector('input[name="email_address"]') ||
+      form.querySelector('input[id*="email"]');
+    if (!emailEl) return;
+    var email = (emailEl.value || '').trim().toLowerCase();
+    if (email && email.indexOf('@') > 0) {
+      send({ type: 'identify', email: email });
+    }
+  }, true);
+
   // Auto-track outbound links and file downloads
   var DOWNLOAD_EXTS = ['pdf', 'zip', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt', 'csv', 'mp4', 'mp3', 'dmg', 'exe', 'pkg'];
   document.addEventListener('click', function (e) {
@@ -132,5 +153,5 @@
     if (location.href !== lastUrl) { lastUrl = location.href; send({ type: 'pageview' }); }
   });
 
-  window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track };
+  window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track, identify: identify };
 })();

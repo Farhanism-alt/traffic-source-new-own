@@ -1,5 +1,6 @@
 import { DodoPayments } from 'dodopayments';
 import { getRow, getRows, run } from './db';
+import { lookupVisitorByEmail } from './visitor-identity';
 
 export async function syncDodoPayments() {
   const sites = await getRows(
@@ -29,8 +30,14 @@ export async function syncDodoPayments() {
         if (existing) continue;
 
         // Extract visitor/session IDs from metadata
-        const visitorId = payment.metadata?.ts_visitor_id || null;
+        let visitorId = payment.metadata?.ts_visitor_id || null;
         let sessionId = payment.metadata?.ts_session_id || null;
+
+        // Fallback: match by customer email via visitor_identities
+        const customerEmail = payment.customer?.email || null;
+        if (!visitorId && customerEmail) {
+          visitorId = await lookupVisitorByEmail(site.id, customerEmail);
+        }
 
         // Attribution via session lookup
         let utmSource = null, utmMedium = null, utmCampaign = null, referrerDomain = null;

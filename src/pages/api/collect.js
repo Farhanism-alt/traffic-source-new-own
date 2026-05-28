@@ -1,5 +1,6 @@
 import { getRow, run } from '@/lib/db';
 import { normalizeSource } from '@/lib/sources';
+import { upsertVisitorIdentity } from '@/lib/visitor-identity';
 const UAParser = require('ua-parser-js');
 
 export const config = {
@@ -50,6 +51,16 @@ export default async function handler(req, res) {
         data.session_id,
         data.site_id,
       ]);
+      return res.status(200).end();
+    }
+
+    // Identify: link visitor_id to an email address
+    if (data.type === 'identify') {
+      const email = (data.email || '').trim().toLowerCase();
+      if (!email || email.indexOf('@') < 1) return res.status(400).end();
+      const site = await getRow('SELECT id FROM sites WHERE id = ?', [data.site_id]);
+      if (!site) return res.status(404).end();
+      await upsertVisitorIdentity(data.site_id, data.visitor_id, email);
       return res.status(200).end();
     }
 

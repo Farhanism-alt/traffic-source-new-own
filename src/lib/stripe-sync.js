@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { getRow, getRows, run } from './db';
+import { lookupVisitorByEmail } from './visitor-identity';
 
 export async function syncStripePayments() {
   const sites = await getRows(
@@ -47,6 +48,12 @@ export async function syncStripePayments() {
             visitorId = parts[0];
             sessionId = parts[1];
           }
+        }
+
+        // Fallback: match by customer email via visitor_identities
+        const customerEmail = session.customer_email || session.customer_details?.email || null;
+        if (!visitorId && customerEmail) {
+          visitorId = await lookupVisitorByEmail(site.id, customerEmail);
         }
 
         // Look up session data for UTM/referrer attribution

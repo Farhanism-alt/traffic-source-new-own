@@ -30,12 +30,12 @@ export async function syncStripePayments() {
 
         const paymentIntentId = session.payment_intent || session.id;
 
-        // Dedup: skip if already processed
+        // Dedup: skip only if already fully attributed
         const existing = await getRow(
-          'SELECT id FROM conversions WHERE payment_intent_id = ? AND site_id = ?',
+          'SELECT id, visitor_id FROM conversions WHERE payment_intent_id = ? AND site_id = ?',
           [paymentIntentId, site.id]
         );
-        if (existing) continue;
+        if (existing?.visitor_id) continue;
 
         // Extract visitor/session IDs from metadata
         let visitorId = session.metadata?.ts_visitor_id || null;
@@ -54,6 +54,21 @@ export async function syncStripePayments() {
         const customerEmail = session.customer_email || session.customer_details?.email || null;
         if (!visitorId && customerEmail) {
           visitorId = await lookupVisitorByEmail(site.id, customerEmail);
+        }
+
+        // Existing conversion with no visitor_id: update attribution in place and move on
+        if (existing) {
+          if (visitorId) {
+            const recentSession = await getRow(
+              'SELECT * FROM sessions WHERE visitor_id = ? AND site_id = ? ORDER BY started_at DESC LIMIT 1',
+              [visitorId, site.id]
+            );
+            await run(
+              `UPDATE conversions SET visitor_id = ?, session_id = ?, utm_source = ?, utm_medium = ?, utm_campaign = ?, referrer_domain = ? WHERE id = ? AND visitor_id IS NULL`,
+              [visitorId, recentSession?.id || null, recentSession?.utm_source || null, recentSession?.utm_medium || null, recentSession?.utm_campaign || null, recentSession?.referrer_domain || null, existing.id]
+            );
+          }
+          continue;
         }
 
         // Look up session data for UTM/referrer attribution

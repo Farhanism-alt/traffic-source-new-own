@@ -73,6 +73,9 @@ export default withAuth(async function handler(req, res) {
   const sfWhere = sf.clauses.length > 0 ? ' AND ' + sf.clauses.join(' AND ') : '';
   const sfAliasedWhere = sfAliased.clauses.length > 0 ? ' AND ' + sfAliased.clauses.join(' AND ') : '';
   const pvfWhere = pvf.clauses.length > 0 ? ' AND ' + pvf.clauses.join(' AND ') : '';
+  // Restrict sessions to those that contain the filtered page
+  const pvSubquery = usePageFilter ? ` AND id IN (SELECT DISTINCT session_id FROM page_views WHERE site_id = ? AND pathname = ?)` : '';
+  const pvSubParams = usePageFilter ? [siteId, req.query.page] : [];
 
   let current, previous;
   if (useSessionFilters || usePageFilter) {
@@ -96,7 +99,7 @@ export default withAuth(async function handler(req, res) {
   const prevBounceRate = previous.total_sessions > 0 ? ((previous.total_bounces / previous.total_sessions) * 100).toFixed(1) : 0;
 
   const sessQ = (baseWhere, baseParams, select, groupOrder) =>
-    getRows(`${select} FROM sessions WHERE ${baseWhere}${sfWhere} ${groupOrder}`, [...baseParams, ...sf.params]);
+    getRows(`${select} FROM sessions WHERE ${baseWhere}${sfWhere}${pvSubquery} ${groupOrder}`, [...baseParams, ...sf.params, ...pvSubParams]);
 
   let timeSeriesPromise;
   if (useSessionFilters || usePageFilter) {
@@ -146,11 +149,11 @@ export default withAuth(async function handler(req, res) {
 
   const affiliateBreakdownPromise = getRows(`SELECT a.name, a.slug, COALESCE(v.visits, 0) as visits, COALESCE(c.conversions, 0) as conversions, COALESCE(c.revenue, 0) as revenue FROM affiliates a LEFT JOIN (SELECT affiliate_id, COUNT(*) as visits FROM affiliate_visits WHERE site_id = ? AND landed_at BETWEEN ? AND ? GROUP BY affiliate_id) v ON v.affiliate_id = a.id LEFT JOIN (SELECT affiliate_id, COUNT(*) as conversions, SUM(CASE WHEN currency = 'usd' THEN amount ELSE 0 END) as revenue FROM conversions WHERE site_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ? GROUP BY affiliate_id) c ON c.affiliate_id = a.id WHERE a.site_id = ? ORDER BY COALESCE(c.revenue, 0) DESC, COALESCE(v.visits, 0) DESC LIMIT 10`, [siteId, range.from, dateEnd, siteId, range.from, dateEnd, siteId]);
 
-  const rawDailySourcesPromise = getRows(`SELECT DATE(started_at) as date, COALESCE(utm_source, referrer_domain, 'Direct') as source, COUNT(*) as count FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ? GROUP BY DATE(started_at), COALESCE(utm_source, referrer_domain, 'Direct') ORDER BY date, count DESC`, [siteId, range.from, dateEnd]);
+  const rawDailySourcesPromise = getRows(`SELECT DATE(started_at) as date, COALESCE(utm_source, referrer_domain, 'Direct') as source, COUNT(*) as count FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ?${sfWhere}${pvSubquery} GROUP BY DATE(started_at), COALESCE(utm_source, referrer_domain, 'Direct') ORDER BY date, count DESC`, [siteId, range.from, dateEnd, ...sf.params, ...pvSubParams]);
 
   const newReturningPromise = getRow(`
     WITH period_vids AS (
-      SELECT DISTINCT visitor_id FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ?
+      SELECT DISTINCT visitor_id FROM sessions WHERE site_id = ? AND started_at BETWEEN ? AND ?${pvSubquery}
     )
     SELECT
       COUNT(CASE WHEN NOT EXISTS (
@@ -160,7 +163,7 @@ export default withAuth(async function handler(req, res) {
         SELECT 1 FROM sessions s2 WHERE s2.site_id = ? AND s2.visitor_id = pv.visitor_id AND s2.started_at < ?
       ) THEN 1 END) as returning_visitors
     FROM period_vids pv
-  `, [siteId, range.from, dateEnd, siteId, range.from, siteId, range.from]).catch(() => null);
+  `, [siteId, range.from, dateEnd, ...pvSubParams, siteId, range.from, siteId, range.from]).catch(() => null);
 
   const topEventsPromise = getRows(`
     SELECT name, COUNT(*) as count, COUNT(DISTINCT visitor_id) as unique_visitors

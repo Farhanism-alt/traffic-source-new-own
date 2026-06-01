@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import MetricStrip from '@/components/ui/MetricStrip';
 import AnalyticsPanel from '@/components/ui/AnalyticsPanel';
 import CombinedChart from '@/components/charts/CombinedChart';
+import ConversionDrawer from '@/components/ui/ConversionDrawer';
 import RealtimeUsers from '@/components/ui/RealtimeUsers';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useFilters } from '@/contexts/FilterContext';
@@ -30,6 +31,8 @@ export default function Analytics() {
   const { siteId } = router.query;
   const { filters, setFilter, removeFilter, clearFilters, hasFilters } = useFilters();
   const [spikeDay, setSpikeDay] = useState(null);
+  const [dayBuyers, setDayBuyers] = useState(null);
+  const [selectedConversion, setSelectedConversion] = useState(null);
   const [chartFullscreen, setChartFullscreen] = useState(false);
   const [compare, setCompare] = useState(false);
   const [annForm, setAnnForm] = useState({ open: false, date: '', note: '' });
@@ -58,6 +61,27 @@ export default function Analytics() {
     setSyncing(false);
     setTimeout(() => setSyncMsg(''), 6000);
   }, [siteId, syncing, refetch]);
+
+  // Clicking the green revenue bar: load that day's paid customers, then their journey
+  const openDayBuyers = useCallback(async (date) => {
+    if (!siteId) return;
+    const day = String(date).slice(0, 10);
+    setSpikeDay(null);
+    setDayBuyers({ date: day, list: [], loading: true });
+    try {
+      const res = await fetch(`/api/analytics/${siteId}/conversions?from=${day}&to=${day}&limit=100`);
+      const json = res.ok ? await res.json() : null;
+      const list = json?.conversions || [];
+      if (list.length === 1) {
+        setSelectedConversion(list[0]);
+        setDayBuyers(null);
+      } else {
+        setDayBuyers({ date: day, list, loading: false });
+      }
+    } catch {
+      setDayBuyers({ date: day, list: [], loading: false });
+    }
+  }, [siteId]);
 
   useEffect(() => {
     if (!chartFullscreen) return;
@@ -253,6 +277,7 @@ export default function Analytics() {
               compareData={compare ? (data.prevTimeSeries || []) : undefined}
               annotations={data.annotations || []}
               onDayClick={(date, dayData) => setSpikeDay(prev => prev?.date === date ? null : { date, dayData })}
+              onRevenueClick={(date) => openDayBuyers(date)}
             />
           </div>
         </div>
@@ -312,6 +337,51 @@ export default function Analytics() {
             </div>
           );
         })()}
+
+        {dayBuyers && (
+          <div className="spike-panel">
+            <div className="spike-panel-header">
+              <span className="spike-panel-date">
+                Paid customers · {new Date(dayBuyers.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </span>
+              {dayBuyers.list.length > 0 && (
+                <span className="spike-panel-badge">
+                  {dayBuyers.list.length} buyer{dayBuyers.list.length === 1 ? '' : 's'}
+                </span>
+              )}
+              <button className="spike-panel-close" onClick={() => setDayBuyers(null)}>&times;</button>
+            </div>
+            {dayBuyers.loading ? (
+              <div className="loading-inline"><div className="loading-spinner" /></div>
+            ) : dayBuyers.list.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '12px 0' }}>
+                No paid customers recorded for this day.
+              </div>
+            ) : (
+              <div className="spike-panel-sources">
+                <div className="spike-panel-sources-label">Select a customer to trace their journey</div>
+                {dayBuyers.list.map((c) => (
+                  <button
+                    key={c.id}
+                    className="spike-panel-source-row"
+                    style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: '6px 0' }}
+                    onClick={() => { setSelectedConversion(c); setDayBuyers(null); }}
+                  >
+                    <ChannelIcon name={c.utm_source || c.referrer_domain || 'Direct'} />
+                    <span className="spike-panel-source-name">
+                      {c.stripe_customer_email
+                        ? c.stripe_customer_email
+                        : `Visitor ${(c.visitor_id || '').slice(-6) || '—'}`}
+                    </span>
+                    <span className="spike-panel-source-count">
+                      ${((c.amount || 0) / 100).toLocaleString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid-2">
           <AnalyticsPanel
@@ -518,6 +588,12 @@ export default function Analytics() {
         )}
 
       </DashboardLayout>
+
+      <ConversionDrawer
+        siteId={siteId}
+        conversion={selectedConversion}
+        onClose={() => setSelectedConversion(null)}
+      />
     </>
   );
 }

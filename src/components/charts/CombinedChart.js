@@ -79,7 +79,7 @@ function AnnotationLabel({ viewBox, note, ct }) {
   );
 }
 
-export default function CombinedChart({ trafficData, revenueData, dailySources = {}, onDayClick, compareData, annotations = [] }) {
+export default function CombinedChart({ trafficData, revenueData, dailySources = {}, onDayClick, onRevenueClick, compareData, annotations = [] }) {
   const ct = useChartTheme();
   const merged = mergeByDate(trafficData, revenueData, dailySources, compareData);
 
@@ -158,7 +158,14 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
               label={(props) => <AnnotationLabel {...props} note={ann.note} ct={ct} />}
             />
           ))}
-          {hasRevenue && <Bar yAxisId="right" dataKey="revenue" fill={ct.barRevenue} radius={[4, 4, 0, 0]} barSize={20} opacity={0.75} />}
+          {hasRevenue && <Bar yAxisId="right" dataKey="revenue" fill={ct.barRevenue} radius={[4, 4, 0, 0]} barSize={20} opacity={0.75}
+            cursor={onRevenueClick ? 'pointer' : undefined}
+            onClick={onRevenueClick ? (entry, idx, e) => {
+              e?.stopPropagation?.();
+              const date = entry?.date || entry?.payload?.date;
+              if (date && (entry?.revenue || entry?.payload?.revenue)) onRevenueClick(date, entry?.payload || entry);
+            } : undefined}
+          />}
           {/* Previous period comparison line */}
           {hasCompare && (
             <Area yAxisId="left" type="monotone" dataKey="prevVisitors" stroke={ct.axis} strokeWidth={1.5} strokeDasharray="5 3" fill="none" dot={false} activeDot={false} name="Previous" />

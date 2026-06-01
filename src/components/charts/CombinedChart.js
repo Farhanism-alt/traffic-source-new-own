@@ -13,20 +13,33 @@ import { useChartTheme } from '@/hooks/useChartTheme';
 
 const DOMAIN_MAP = {
   google: 'google.com', bing: 'bing.com', yahoo: 'yahoo.com',
+  yandex: 'yandex.com', baidu: 'baidu.com',
   duckduckgo: 'duckduckgo.com', facebook: 'facebook.com',
-  instagram: 'instagram.com', twitter: 'twitter.com', x: 'x.com',
+  instagram: 'instagram.com', twitter: 'x.com', x: 'x.com',
   linkedin: 'linkedin.com', reddit: 'reddit.com', youtube: 'youtube.com',
   tiktok: 'tiktok.com', pinterest: 'pinterest.com', github: 'github.com',
-  medium: 'medium.com',
+  medium: 'medium.com', whatsapp: 'whatsapp.com', telegram: 'telegram.org',
+  'hacker news': 'news.ycombinator.com', 'product hunt': 'producthunt.com',
+  perplexity: 'perplexity.ai', chatgpt: 'openai.com', openai: 'openai.com',
+  claude: 'claude.ai', gemini: 'gemini.google.com',
 };
 
 function resolveDomain(name = '') {
   if (!name || name === 'Direct') return null;
   const v = name.trim().toLowerCase();
   if (DOMAIN_MAP[v]) return DOMAIN_MAP[v];
-  try { if (v.startsWith('http')) return new URL(v).hostname; } catch {}
+  // Android/iOS app referrers (reverse-DNS), e.g. com.reddit.frontpage, com.google.android.gm
+  if (!v.includes('/') && /^[a-z]+(\.[a-z0-9]+){2,}$/.test(v)) {
+    const parts = v.split('.');
+    for (const seg of parts) {
+      if (DOMAIN_MAP[seg]) return DOMAIN_MAP[seg];
+    }
+    if (parts.length >= 2) return `${parts[1]}.com`;
+  }
+  try { if (v.startsWith('http')) return new URL(v).hostname.replace(/^www\./, ''); } catch {}
   if (v.includes('.')) return v.replace(/^www\./, '');
-  return null;
+  // Bare single-word source we don't explicitly know — best-effort guess
+  return `${v}.com`;
 }
 
 function SpikeDot(props) {
@@ -43,7 +56,14 @@ function SpikeDot(props) {
       <circle cx={cx} cy={cy - 22} r={13} fill={ct?.tooltipBg || '#1e1e1e'} stroke={ct?.line || '#3b82f6'} strokeWidth={1.5} />
       {faviconUrl
         ? <image x={cx - 9} y={cy - 31} width={18} height={18} href={faviconUrl} style={{ borderRadius: 4 }} />
-        : <text x={cx} y={cy - 18} textAnchor="middle" fontSize={9} fill={ct?.axis || '#888'}>?</text>
+        : (
+          // Direct traffic — no favicon, show a globe glyph instead of a "?"
+          <g transform={`translate(${cx - 7}, ${cy - 29})`} stroke={ct?.axis || '#888'} strokeWidth={1.2} fill="none">
+            <circle cx={7} cy={7} r={6.4} />
+            <ellipse cx={7} cy={7} rx={2.6} ry={6.4} />
+            <line x1={0.6} y1={7} x2={13.4} y2={7} />
+          </g>
+        )
       }
     </g>
   );

@@ -99,7 +99,7 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
   return (
     <div className="chart-container">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={merged} margin={{ top: 32, right: hasRevenue ? 50 : 20, left: 10, bottom: 5 }} onClick={handleChartClick} style={{ cursor: onDayClick ? 'pointer' : 'default' }}>
+        <ComposedChart data={merged} margin={{ top: 56, right: hasRevenue ? 50 : 20, left: 10, bottom: 5 }} onClick={handleChartClick} style={{ cursor: onDayClick ? 'pointer' : 'default' }}>
           <defs>
             <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={ct.line || '#3b82f6'} stopOpacity={0.15} />
@@ -137,7 +137,7 @@ export default function CombinedChart({ trafficData, revenueData, dailySources =
                       <span>Previous: {d.prevVisitors?.toLocaleString()}</span>
                     </div>
                   )}
-                  {d?.spikeSrc && d.spikeSrc !== 'Direct' && (
+                  {d?.spikeSrc && (
                     <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${ct.tooltipBorder}`, fontSize: 12, color: ct.tooltipLabel, fontStyle: 'italic' }}>
                       Traffic spike from <strong>{d.spikeSrc}</strong>
                     </div>

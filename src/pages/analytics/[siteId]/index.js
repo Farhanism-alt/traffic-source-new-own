@@ -224,7 +224,17 @@ export default function Analytics() {
           className={chartFullscreen ? 'panel chart-panel-fs' : 'panel'}
           style={chartFullscreen ? {} : { marginBottom: spikeDay ? 0 : 20, position: 'relative' }}
         >
-          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 6 }}>
+          {/* Single flex header row — form and buttons share the same space, no overlapping */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', minHeight: 44 }}>
+            {annForm.open ? (
+              <>
+                <input type="date" className="ann-form-date" value={annForm.date} onChange={e => setAnnForm(f => ({ ...f, date: e.target.value }))} />
+                <input type="text" className="ann-form-note" placeholder="Add a note…" value={annForm.note} onChange={e => setAnnForm(f => ({ ...f, note: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') saveAnnotation(); if (e.key === 'Escape') setAnnForm({ open: false, date: '', note: '' }); }} autoFocus maxLength={200} />
+                <button className="ann-form-save" onClick={saveAnnotation}>Save</button>
+                <button className="ann-form-cancel" onClick={() => setAnnForm({ open: false, date: '', note: '' })}>×</button>
+              </>
+            ) : <div style={{ flex: 1 }} />}
             <button
               className={`chart-ctrl-btn${compare ? ' active' : ''}`}
               onClick={() => setCompare(c => !c)}
@@ -244,10 +254,9 @@ export default function Analytics() {
               </svg>
             </button>
             <button
-              className="chart-fs-btn"
+              className="chart-ctrl-btn"
               onClick={() => setChartFullscreen(f => !f)}
               title={chartFullscreen ? 'Exit fullscreen (Esc)' : 'View fullscreen'}
-              style={{ position: 'static' }}
             >
               {chartFullscreen ? (
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -260,15 +269,6 @@ export default function Analytics() {
               )}
             </button>
           </div>
-          {annForm.open && (
-            <div className="ann-form">
-              <input type="date" className="ann-form-date" value={annForm.date} onChange={e => setAnnForm(f => ({ ...f, date: e.target.value }))} />
-              <input type="text" className="ann-form-note" placeholder="Add a note…" value={annForm.note} onChange={e => setAnnForm(f => ({ ...f, note: e.target.value }))}
-                onKeyDown={e => { if (e.key === 'Enter') saveAnnotation(); if (e.key === 'Escape') setAnnForm({ open: false, date: '', note: '' }); }} autoFocus maxLength={200} />
-              <button className="ann-form-save" onClick={saveAnnotation}>Save</button>
-              <button className="ann-form-cancel" onClick={() => setAnnForm({ open: false, date: '', note: '' })}>×</button>
-            </div>
-          )}
           <div className={chartFullscreen ? 'chart-container chart-container-fs' : 'chart-container'}>
             <CombinedChart
               trafficData={data.timeSeries}

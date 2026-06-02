@@ -35,6 +35,22 @@ export default withAuth(async function handler(req, res) {
   if (!effectiveVisitorId && conversion?.stripe_customer_email) {
     effectiveVisitorId = await lookupVisitorByEmail(siteId, conversion.stripe_customer_email);
   }
+  // Fallback: resolve visitor_id via the conversion's session_id
+  if (!effectiveVisitorId && conversion?.session_id) {
+    const linkedSess = await getRow(
+      'SELECT visitor_id FROM sessions WHERE id = ? AND site_id = ?',
+      [conversion.session_id, siteId]
+    );
+    if (linkedSess?.visitor_id) effectiveVisitorId = linkedSess.visitor_id;
+  }
+  // Fallback: find visitor_id from an older conversion with the same email that was already linked
+  if (!effectiveVisitorId && conversion?.stripe_customer_email) {
+    const prevConv = await getRow(
+      `SELECT visitor_id FROM conversions WHERE site_id = ? AND stripe_customer_email = ? AND visitor_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
+      [siteId, conversion.stripe_customer_email]
+    );
+    if (prevConv?.visitor_id) effectiveVisitorId = prevConv.visitor_id;
+  }
 
   // Sessions and page views only when we have a real visitor id to look up
   let sessions = [];

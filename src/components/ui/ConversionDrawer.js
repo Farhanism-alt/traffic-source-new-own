@@ -113,13 +113,53 @@ export default function ConversionDrawer({ siteId, conversion, onClose }) {
               </div>
 
               <div className="drawer-timeline">
-                {data.sessions.length === 0 && (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
-                    No browsing sessions recorded for this customer.
-                    <br />
-                    <span style={{ fontSize: 12 }}>Pass <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>ts_visitor_id</code> in checkout metadata to link sessions.</span>
-                  </div>
-                )}
+                {data.sessions.length === 0 && (() => {
+                  // Merge journey API row with the list-API row (which has session-joined country/browser/entry_page)
+                  const c = { ...(conversion || {}), ...(data.conversion || {}) };
+                  const src = c.utm_source || c.referrer_domain;
+                  const hasAttribution = src || c.utm_medium || c.utm_campaign || c.country || c.city || c.browser || c.entry_page;
+                  if (hasAttribution) {
+                    return (
+                      <div className="timeline-session" style={{ marginBottom: 12 }}>
+                        <div className="timeline-track">
+                          <div className="timeline-dot" style={{ background: 'var(--text-muted)' }} />
+                          <div className="timeline-line" />
+                        </div>
+                        <div className="timeline-content">
+                          <div className="timeline-session-header">
+                            <span className="timeline-session-label" style={{ color: 'var(--text-muted)' }}>Last known session</span>
+                          </div>
+                          <div className="timeline-session-meta">
+                            {c.country && (
+                              <span>
+                                <CountryFlag code={c.country} size="s" />
+                                {getCountryName(c.country)}
+                                {c.city ? `, ${c.city}` : ''}
+                              </span>
+                            )}
+                            {c.browser && (
+                              <span>
+                                <TechIcon type="browser" name={c.browser} />
+                                {c.browser}
+                              </span>
+                            )}
+                            {src && <span>via {src}</span>}
+                            {c.utm_medium && <span>medium: {c.utm_medium}</span>}
+                            {c.utm_campaign && <span>campaign: {c.utm_campaign}</span>}
+                            {c.entry_page && <span>entry: {c.entry_page}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '16px 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
+                      No browsing sessions recorded for this customer.
+                      <br />
+                      <span style={{ fontSize: 12 }}>Add <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>ts_visitor_id</code> to checkout metadata to link sessions.</span>
+                    </div>
+                  );
+                })()}
                 {data.sessions.map((session, idx) => (
                   <div key={session.id} className="timeline-session">
                     <div className="timeline-track">

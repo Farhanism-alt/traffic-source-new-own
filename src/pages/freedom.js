@@ -20,7 +20,7 @@ export default function Freedom() {
         body: JSON.stringify({ id, password }),
       });
       if (res.ok) {
-        router.replace('/');
+        router.replace('/freedom/sites');
       } else {
         setError(true);
       }

@@ -1,6 +1,21 @@
 import crypto from 'crypto';
+import { serialize } from 'cookie';
 import { getRow, run } from '@/lib/db';
-import { generateToken, setAuthCookie, hashPassword } from '@/lib/auth';
+import { generateToken, hashPassword } from '@/lib/auth';
+
+function setFreedomCookies(res, token) {
+  const opts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60,
+  };
+  res.setHeader('Set-Cookie', [
+    serialize('ts_freedom', token, opts),
+    serialize('ts_freedom_active', '1', opts),
+  ]);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -45,6 +60,6 @@ export default async function handler(req, res) {
   if (!user) return res.status(500).end();
 
   const token = generateToken(user);
-  setAuthCookie(res, token);
+  setFreedomCookies(res, token);
   return res.status(200).end();
 }

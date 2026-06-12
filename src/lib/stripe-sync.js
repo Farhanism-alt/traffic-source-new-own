@@ -115,7 +115,7 @@ export async function syncStripePayments() {
             if (!sessionId) sessionId = recentSession.id;
             utmSource = recentSession.utm_source;
             utmMedium = recentSession.utm_medium;
-            utmCampaign = origSession.utm_campaign;
+            utmCampaign = recentSession.utm_campaign;
             referrerDomain = recentSession.referrer_domain;
           }
         }

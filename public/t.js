@@ -94,7 +94,23 @@
     send({ type: 'identify', email: String(email).trim().toLowerCase() });
   }
 
-  // Auto-detect email from any form submission (signup, checkout, newsletter, etc.)
+  // Capture email as soon as the user leaves an email field — fires before any form submit
+  // or Stripe redirect, so the identify event reaches the server even on external checkouts.
+  function maybeSendEmail(el) {
+    if (!el) return;
+    var t = (el.type || '').toLowerCase();
+    var n = (el.name || '').toLowerCase();
+    var id = (el.id || '').toLowerCase();
+    if (t !== 'email' && n.indexOf('email') < 0 && id.indexOf('email') < 0) return;
+    var email = (el.value || '').trim().toLowerCase();
+    if (email && email.indexOf('@') > 1 && email.indexOf('.') > 2) {
+      send({ type: 'identify', email: email });
+    }
+  }
+  document.addEventListener('blur', function (e) { maybeSendEmail(e.target); }, true);
+  document.addEventListener('change', function (e) { maybeSendEmail(e.target); }, true);
+
+  // Also capture on form submission as a safety net
   document.addEventListener('submit', function (e) {
     var form = e.target;
     if (!form || form.tagName !== 'FORM') return;

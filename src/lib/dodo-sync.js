@@ -39,6 +39,30 @@ export async function syncDodoPayments() {
           visitorId = await lookupVisitorByEmail(site.id, customerEmail);
         }
 
+        // Fallback: temporal proximity — find the visitor most recently active before this payment.
+        // Uses billing country to reduce false positives on busier sites.
+        if (!visitorId) {
+          const paymentAt = payment.created_at
+            ? (typeof payment.created_at === 'number'
+                ? new Date(payment.created_at * 1000).toISOString()
+                : payment.created_at)
+            : new Date().toISOString();
+          const billingCountry = payment.customer?.billing_address?.country
+            || payment.customer?.country
+            || null;
+          const proxSession = await getRow(
+            `SELECT visitor_id FROM sessions
+             WHERE site_id = ?
+               AND last_activity <= ?
+               AND last_activity >= ? - INTERVAL '2 hours'
+               AND (? IS NULL OR country = ?)
+             ORDER BY last_activity DESC
+             LIMIT 1`,
+            [site.id, paymentAt, paymentAt, billingCountry, billingCountry]
+          );
+          if (proxSession?.visitor_id) visitorId = proxSession.visitor_id;
+        }
+
         // Existing conversion with no visitor_id: update attribution in place and move on
         if (existing) {
           if (visitorId) {

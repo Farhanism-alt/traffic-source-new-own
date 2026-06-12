@@ -68,6 +68,24 @@ export async function syncLemonSqueezyPayments() {
             visitorId = await lookupVisitorByEmail(site.id, customerEmail);
           }
 
+          // Fallback: temporal proximity — find the visitor most recently active before this payment.
+          // Uses billing country to reduce false positives on busier sites.
+          if (!visitorId) {
+            const paymentAt = attrs.created_at || new Date().toISOString();
+            const billingCountry = attrs.billing_address?.country || null;
+            const proxSession = await getRow(
+              `SELECT visitor_id FROM sessions
+               WHERE site_id = ?
+                 AND last_activity <= ?
+                 AND last_activity >= ? - INTERVAL '2 hours'
+                 AND (? IS NULL OR country = ?)
+               ORDER BY last_activity DESC
+               LIMIT 1`,
+              [site.id, paymentAt, paymentAt, billingCountry, billingCountry]
+            );
+            if (proxSession?.visitor_id) visitorId = proxSession.visitor_id;
+          }
+
           // Existing conversion with no visitor_id: update attribution in place and move on
           if (existing) {
             if (visitorId) {
@@ -98,8 +116,8 @@ export async function syncLemonSqueezyPayments() {
 
           if (!utmSource && visitorId) {
             const recentSession = await getRow(
-              'SELECT * FROM sessions WHERE visitor_id = ? ORDER BY started_at DESC LIMIT 1',
-              [visitorId]
+              'SELECT * FROM sessions WHERE visitor_id = ? AND site_id = ? ORDER BY started_at DESC LIMIT 1',
+              [visitorId, site.id]
             );
             if (recentSession) {
               if (!sessionId) sessionId = recentSession.id;

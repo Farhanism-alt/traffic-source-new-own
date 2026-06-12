@@ -108,8 +108,8 @@ export async function syncStripePayments() {
         // Fallback: find most recent session by visitor_id
         if (!utmSource && visitorId) {
           const recentSession = await getRow(
-            'SELECT * FROM sessions WHERE visitor_id = ? ORDER BY started_at DESC LIMIT 1',
-            [visitorId]
+            'SELECT * FROM sessions WHERE visitor_id = ? AND site_id = ? ORDER BY started_at DESC LIMIT 1',
+            [visitorId, site.id]
           );
           if (recentSession) {
             if (!sessionId) sessionId = recentSession.id;

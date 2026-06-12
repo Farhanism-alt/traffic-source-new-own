@@ -76,10 +76,10 @@ export async function syncLemonSqueezyPayments() {
             const proxSession = await getRow(
               `SELECT visitor_id FROM sessions
                WHERE site_id = ?
-                 AND last_activity <= ?
-                 AND last_activity >= ? - INTERVAL '2 hours'
+                 AND COALESCE(last_activity, started_at) <= ?
+                 AND COALESCE(last_activity, started_at) >= ? - INTERVAL '2 hours'
                  AND (? IS NULL OR country = ?)
-               ORDER BY last_activity DESC
+               ORDER BY COALESCE(last_activity, started_at) DESC
                LIMIT 1`,
               [site.id, paymentAt, paymentAt, billingCountry, billingCountry]
             );

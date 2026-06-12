@@ -126,8 +126,8 @@ export default async function handler(req, res) {
           utm_term, utm_content, country, city, continent,
           browser, browser_version, os, os_version, device_type,
           screen_width, screen_height,
-          page_count, is_bounce, duration
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, true, 0)`,
+          page_count, is_bounce, duration, last_activity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, true, 0, NOW())`,
         [
           data.session_id,
           data.site_id,

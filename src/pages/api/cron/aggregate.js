@@ -31,8 +31,8 @@ export default async function handler(req, res) {
           `SELECT
             COUNT(DISTINCT visitor_id) as visitors,
             COUNT(*) as sessions,
-            SUM(is_bounce::int) as bounces,
-            AVG(duration) as avg_duration
+            SUM((COALESCE(is_bounce, page_count <= 1))::int) as bounces,
+            AVG(COALESCE(duration, 0)) as avg_duration
            FROM sessions
            WHERE site_id = ? AND DATE(started_at) = ?`,
           [site.id, date]

@@ -82,16 +82,19 @@ export default withAuth(async function handler(req, res) {
     const sessionJoinPv = usePageFilter ? `INNER JOIN page_views pv ON pv.site_id = s.site_id AND pv.session_id = s.id` : '';
     const pvFilterClause = usePageFilter ? ` AND pv.pathname = ?` : '';
     const pvParams = usePageFilter ? [req.query.page] : [];
-    const q = `SELECT COUNT(DISTINCT s.visitor_id) as total_visitors, COUNT(DISTINCT s.id) as total_sessions, COALESCE(SUM(s.page_count), 0) as total_page_views, COALESCE(SUM(s.is_bounce::int), 0) as total_bounces, COALESCE(AVG(s.duration), 0) as avg_duration FROM sessions s ${sessionJoinPv} WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`;
+    const q = `SELECT COUNT(DISTINCT s.visitor_id) as total_visitors, COUNT(DISTINCT s.id) as total_sessions, COALESCE(SUM(s.page_count), 0) as total_page_views, COALESCE(SUM((COALESCE(s.is_bounce, s.page_count <= 1))::int), 0) as total_bounces, COALESCE(AVG(COALESCE(s.duration, 0)), 0) as avg_duration FROM sessions s ${sessionJoinPv} WHERE s.site_id = ? AND s.started_at BETWEEN ? AND ?${sfAliasedWhere}${pvFilterClause}`;
     [current, previous] = await Promise.all([
       getRow(q, [siteId, range.from, dateEnd, ...sfAliased.params, ...pvParams]),
       getRow(q, [siteId, prevRange.from, prevRange.to + ' 23:59:59', ...sfAliased.params, ...pvParams]),
     ]);
   } else {
-    const q = `SELECT COALESCE(SUM(visitors), 0) as total_visitors, COALESCE(SUM(sessions), 0) as total_sessions, COALESCE(SUM(page_views), 0) as total_page_views, COALESCE(SUM(bounces), 0) as total_bounces, COALESCE(AVG(avg_duration), 0) as avg_duration FROM daily_stats WHERE site_id = ? AND date BETWEEN ? AND ?`;
+    // Keep daily_stats for visitor/session/pageview counts (fast), but always compute
+    // bounce rate and avg_duration from sessions so historical NULL values are handled correctly.
+    const qCounts = `SELECT COALESCE(SUM(visitors), 0) as total_visitors, COALESCE(SUM(sessions), 0) as total_sessions, COALESCE(SUM(page_views), 0) as total_page_views FROM daily_stats WHERE site_id = ? AND date BETWEEN ? AND ?`;
+    const qBounce = `SELECT COALESCE(SUM((COALESCE(is_bounce, page_count <= 1))::int), 0) as total_bounces, COALESCE(AVG(COALESCE(duration, 0)), 0) as avg_duration FROM sessions WHERE site_id = ? AND DATE(started_at) BETWEEN ? AND ?`;
     [current, previous] = await Promise.all([
-      getRow(q, [siteId, range.from, range.to]),
-      getRow(q, [siteId, prevRange.from, prevRange.to]),
+      Promise.all([getRow(qCounts, [siteId, range.from, range.to]), getRow(qBounce, [siteId, range.from, range.to])]).then(([c, b]) => ({ ...c, ...b })),
+      Promise.all([getRow(qCounts, [siteId, prevRange.from, prevRange.to]), getRow(qBounce, [siteId, prevRange.from, prevRange.to])]).then(([c, b]) => ({ ...c, ...b })),
     ]);
   }
 
@@ -119,7 +122,7 @@ export default withAuth(async function handler(req, res) {
     }
   }
 
-  const sourcesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ?`, [siteId, range.from, dateEnd], `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name, COUNT(*) as sessions, COUNT(DISTINCT visitor_id) as visitors, ROUND(AVG(is_bounce::int) * 100, 1) as bounce_rate`, `GROUP BY name ORDER BY sessions DESC LIMIT 20`);
+  const sourcesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ?`, [siteId, range.from, dateEnd], `SELECT COALESCE(utm_source, referrer_domain, 'Direct') as name, COUNT(*) as sessions, COUNT(DISTINCT visitor_id) as visitors, ROUND(AVG((COALESCE(is_bounce, page_count <= 1))::int) * 100, 1) as bounce_rate`, `GROUP BY name ORDER BY sessions DESC LIMIT 20`);
 
   let pagesPromise;
   if (useSessionFilters) {
@@ -128,7 +131,7 @@ export default withAuth(async function handler(req, res) {
     pagesPromise = getRows(`SELECT pathname as name, COUNT(*) as views, COUNT(DISTINCT visitor_id) as visitors FROM page_views WHERE site_id = ? AND timestamp BETWEEN ? AND ?${pvfWhere} GROUP BY pathname ORDER BY views DESC LIMIT 20`, [siteId, range.from, dateEnd, ...pvf.params]);
   }
 
-  const entryPagesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ?`, [siteId, range.from, dateEnd], `SELECT entry_page as name, COUNT(*) as sessions, ROUND(AVG(is_bounce::int) * 100, 1) as bounce_rate`, `GROUP BY entry_page ORDER BY sessions DESC LIMIT 10`);
+  const entryPagesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ?`, [siteId, range.from, dateEnd], `SELECT entry_page as name, COUNT(*) as sessions, ROUND(AVG((COALESCE(is_bounce, page_count <= 1))::int) * 100, 1) as bounce_rate`, `GROUP BY entry_page ORDER BY sessions DESC LIMIT 10`);
   const exitPagesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ?`, [siteId, range.from, dateEnd], `SELECT exit_page as name, COUNT(*) as sessions`, `GROUP BY exit_page ORDER BY sessions DESC LIMIT 10`);
   const countriesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ? AND country IS NOT NULL AND country != ''`, [siteId, range.from, dateEnd], `SELECT country as name, COUNT(*) as count`, `GROUP BY country ORDER BY count DESC LIMIT 20`);
   const citiesPromise = sessQ(`site_id = ? AND started_at BETWEEN ? AND ? AND city IS NOT NULL AND city != ''`, [siteId, range.from, dateEnd], `SELECT city as name, COUNT(*) as count`, `GROUP BY city ORDER BY count DESC LIMIT 20`);

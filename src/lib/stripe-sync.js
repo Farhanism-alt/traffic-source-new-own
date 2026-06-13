@@ -66,7 +66,7 @@ export async function syncStripePayments() {
              WHERE site_id = ?
                AND COALESCE(last_activity, started_at) <= ?::timestamptz
                AND COALESCE(last_activity, started_at) >= ?::timestamptz - INTERVAL '2 hours'
-               AND (? IS NULL OR country = ?)
+               AND (?::text IS NULL OR country = ?)
              ORDER BY COALESCE(last_activity, started_at) DESC
              LIMIT 1`,
             [site.id, paymentAt, paymentAt, billingCountry, billingCountry]

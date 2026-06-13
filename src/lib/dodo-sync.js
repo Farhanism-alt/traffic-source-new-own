@@ -56,8 +56,8 @@ export async function syncDodoPayments() {
           const proxSession = await getRow(
             `SELECT visitor_id FROM sessions
              WHERE site_id = ?
-               AND COALESCE(last_activity, started_at) <= ?
-               AND COALESCE(last_activity, started_at) >= ? - INTERVAL '2 hours'
+               AND COALESCE(last_activity, started_at) <= ?::timestamptz
+               AND COALESCE(last_activity, started_at) >= ?::timestamptz - INTERVAL '2 hours'
                AND (? IS NULL OR country = ?)
              ORDER BY COALESCE(last_activity, started_at) DESC
              LIMIT 1`,

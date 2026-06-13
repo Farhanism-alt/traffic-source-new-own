@@ -11,6 +11,7 @@ export async function syncDodoPayments() {
 
   let totalProcessed = 0;
   let totalRefunds = 0;
+  let lastError = null;
 
   for (const site of sites) {
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
@@ -20,6 +21,8 @@ export async function syncDodoPayments() {
         status: 'succeeded',
         page_size: 100,
       })) {
+        // Defensive in-code check in case the API ignores the status filter
+        if (payment.status && payment.status !== 'succeeded') continue;
         const paymentId = payment.payment_id;
 
         // Dedup: skip only if already fully attributed
@@ -154,8 +157,9 @@ export async function syncDodoPayments() {
       }
     } catch (err) {
       console.error(`Dodo sync error for site ${site.id}:`, err.message);
+      lastError = err.message;
     }
   }
 
-  return { sites: sites.length, conversions: totalProcessed, refunds: totalRefunds };
+  return { sites: sites.length, conversions: totalProcessed, refunds: totalRefunds, ...(lastError ? { error: lastError } : {}) };
 }

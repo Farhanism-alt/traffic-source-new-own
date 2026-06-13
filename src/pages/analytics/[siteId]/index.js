@@ -50,10 +50,17 @@ export default function Analytics() {
       if (!r.ok) {
         setSyncMsg(d.error || `Error ${r.status}`);
       } else {
-        setSyncMsg(d.newConversions > 0
-          ? `Synced ${d.newConversions} new payment${d.newConversions === 1 ? '' : 's'}`
-          : 'No new payments found');
-        if (d.newConversions > 0) refetch();
+        if (d.newConversions > 0) {
+          setSyncMsg(`Synced ${d.newConversions} new payment${d.newConversions === 1 ? '' : 's'}`);
+          refetch();
+        } else {
+          const providerErrors = [
+            d.results?.dodo?.error && `Dodo: ${d.results.dodo.error}`,
+            d.results?.stripe?.error && `Stripe: ${d.results.stripe.error}`,
+            d.results?.lemonsqueezy?.error && `LS: ${d.results.lemonsqueezy.error}`,
+          ].filter(Boolean);
+          setSyncMsg(providerErrors.length > 0 ? providerErrors.join(' | ') : 'No new payments found');
+        }
       }
     } catch (e) {
       setSyncMsg(e.message || 'Network error');
@@ -93,7 +100,7 @@ export default function Analytics() {
   const syncButton = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {syncMsg && (
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: syncMsg.includes(':') && !syncMsg.startsWith('Synced') ? 'var(--danger, #ef4444)' : 'var(--text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {syncMsg}
         </span>
       )}

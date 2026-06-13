@@ -17,20 +17,20 @@ export async function syncDodoPayments() {
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
 
     try {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000);
+      // Scope to the last 7 days using the API's server-side created_at_gte filter.
+      // This keeps the result set small (no full-history pagination → no Vercel timeout)
+      // WITHOUT relying on any assumption about result ordering. The Dodo list endpoint
+      // exposes no sort parameter, so an in-code "break when older than N days" would
+      // silently process nothing if the API happened to return oldest-first.
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
 
       for await (const payment of dodo.payments.list({
         status: 'succeeded',
+        created_at_gte: sevenDaysAgo,
         page_size: 100,
       })) {
         // Defensive in-code check in case the API ignores the status filter
         if (payment.status && payment.status !== 'succeeded') continue;
-
-        // Stop iterating once we reach payments older than 7 days (newest-first ordering)
-        const createdAt = typeof payment.created_at === 'number'
-          ? new Date(payment.created_at * 1000)
-          : new Date(payment.created_at);
-        if (createdAt < sevenDaysAgo) break;
 
         const paymentId = payment.payment_id;
 

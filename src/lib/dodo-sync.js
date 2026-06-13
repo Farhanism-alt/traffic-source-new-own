@@ -17,12 +17,21 @@ export async function syncDodoPayments() {
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
 
     try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000);
+
       for await (const payment of dodo.payments.list({
         status: 'succeeded',
         page_size: 100,
       })) {
         // Defensive in-code check in case the API ignores the status filter
         if (payment.status && payment.status !== 'succeeded') continue;
+
+        // Stop iterating once we reach payments older than 7 days (newest-first ordering)
+        const createdAt = typeof payment.created_at === 'number'
+          ? new Date(payment.created_at * 1000)
+          : new Date(payment.created_at);
+        if (createdAt < sevenDaysAgo) break;
+
         const paymentId = payment.payment_id;
 
         // Dedup: skip only if already fully attributed

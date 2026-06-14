@@ -7,6 +7,7 @@ import AnalyticsPanel from '@/components/ui/AnalyticsPanel';
 import CombinedChart from '@/components/charts/CombinedChart';
 import ConversionDrawer from '@/components/ui/ConversionDrawer';
 import RealtimeUsers from '@/components/ui/RealtimeUsers';
+import InsightsPanel from '@/components/InsightsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useFilters } from '@/contexts/FilterContext';
 import { getCountryName, buildPageHref } from '@/lib/formatters';
@@ -38,6 +39,7 @@ export default function Analytics() {
   const [annForm, setAnnForm] = useState({ open: false, date: '', note: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
   const { data, loading, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
 
   const syncPayments = useCallback(async () => {
@@ -69,7 +71,6 @@ export default function Analytics() {
     setTimeout(() => setSyncMsg(''), 6000);
   }, [siteId, syncing, refetch]);
 
-  // Clicking the green revenue bar: load that day's paid customers, then their journey
   const openDayBuyers = useCallback(async (date) => {
     if (!siteId) return;
     const day = String(date).slice(0, 10);
@@ -104,6 +105,13 @@ export default function Analytics() {
           {syncMsg}
         </span>
       )}
+      <button
+        onClick={() => setInsightsPanelOpen(true)}
+        title="Generate AI Insights for this site"
+        style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, color: '#a78bfa', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+      >
+        ✨ AI Insights
+      </button>
       <button
         onClick={syncPayments}
         disabled={syncing || !siteId}
@@ -231,7 +239,6 @@ export default function Analytics() {
           className={chartFullscreen ? 'panel chart-panel-fs' : 'panel'}
           style={chartFullscreen ? {} : { marginBottom: spikeDay ? 0 : 20, position: 'relative' }}
         >
-          {/* Single flex header row — form and buttons share the same space, no overlapping */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', minHeight: 44 }}>
             {annForm.open ? (
               <>
@@ -600,6 +607,13 @@ export default function Analytics() {
         siteId={siteId}
         conversion={selectedConversion}
         onClose={() => setSelectedConversion(null)}
+      />
+
+      <InsightsPanel
+        siteId={siteId}
+        period={filters.period || '7D'}
+        open={insightsPanelOpen}
+        onClose={() => setInsightsPanelOpen(false)}
       />
     </>
   );

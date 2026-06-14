@@ -1,15 +1,18 @@
-import { withAuth } from '@/lib/withAuth';
 import { getRow, getRows } from '@/lib/db';
 import { DodoPayments } from 'dodopayments';
 
 // Temporary diagnostic - remove once sync issue resolved.
-// GET /api/analytics/dodo-probe
-export default withAuth(async function handler(req, res) {
+// GET /api/analytics/dodo-probe?secret=YOUR_CRON_SECRET
+export default async function handler(req, res) {
+  const secret = req.query.secret;
+  if (!secret || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized — pass ?secret=YOUR_CRON_SECRET' });
+  }
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
 
   const sites = await getRows(
-    'SELECT id, domain, dodo_api_key FROM sites WHERE user_id = ? AND dodo_api_key IS NOT NULL',
-    [req.user.userId]
+    'SELECT id, domain, dodo_api_key FROM sites WHERE dodo_api_key IS NOT NULL'
   );
 
   const out = { sevenDaysAgo, sitesFound: sites.length, sites: [] };
@@ -18,7 +21,6 @@ export default withAuth(async function handler(req, res) {
     const report = { siteId: site.id, domain: site.domain, keyPreview: site.dodo_api_key?.slice(0, 8) + '...' };
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
 
-    // List all succeeded payments from last 7 days and check each against DB
     try {
       const payments = [];
       for await (const p of dodo.payments.list({ status: 'succeeded', created_at_gte: sevenDaysAgo, page_size: 100 })) {
@@ -50,4 +52,4 @@ export default withAuth(async function handler(req, res) {
   }
 
   return res.json(out);
-});
+}

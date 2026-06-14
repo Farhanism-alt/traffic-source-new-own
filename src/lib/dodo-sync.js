@@ -17,8 +17,11 @@ export async function syncDodoPayments() {
     const dodo = new DodoPayments({ bearerToken: site.dodo_api_key });
 
     try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+
       for await (const payment of dodo.payments.list({
         status: 'succeeded',
+        created_at_gte: sevenDaysAgo,
         page_size: 100,
       })) {
         // Defensive in-code check in case the API ignores the status filter
@@ -144,16 +147,24 @@ export async function syncDodoPayments() {
         totalProcessed++;
       }
 
-      // Check for refunds by looking at payments with refund_status
-      for await (const payment of dodo.payments.list({
-        page_size: 100,
-      })) {
-        if (!payment.refund_status) continue;
-        const updated = await run(
-          "UPDATE conversions SET status = 'refunded' WHERE payment_intent_id = ? AND site_id = ? AND status = 'completed' AND payment_provider = 'dodo'",
-          [payment.payment_id, site.id]
-        );
-        if (updated.rowCount > 0) totalRefunds++;
+      // Check for refunds — only scan payments we already have in DB (avoids full-history scan)
+      const recentDodoConversions = await getRows(
+        "SELECT payment_intent_id FROM conversions WHERE site_id = ? AND status = 'completed' AND payment_provider = 'dodo' AND created_at > NOW() - INTERVAL '30 days'",
+        [site.id]
+      );
+      for (const conv of recentDodoConversions) {
+        try {
+          const payment = await dodo.payments.retrieve(conv.payment_intent_id);
+          if (payment?.refund_status) {
+            const updated = await run(
+              "UPDATE conversions SET status = 'refunded' WHERE payment_intent_id = ? AND site_id = ? AND status = 'completed' AND payment_provider = 'dodo'",
+              [conv.payment_intent_id, site.id]
+            );
+            if (updated.rowCount > 0) totalRefunds++;
+          }
+        } catch {
+          // individual payment lookup failure is non-fatal
+        }
       }
     } catch (err) {
       console.error(`Dodo sync error for site ${site.id}:`, err.message);

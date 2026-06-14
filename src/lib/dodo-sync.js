@@ -121,6 +121,20 @@ export async function syncDodoPayments() {
           if (affiliateVisit) affiliateId = affiliateVisit.affiliate_id;
         }
 
+        // Use settlement amount/currency so revenue shows in merchant's payout currency (e.g. USD)
+        // rather than the customer's billing currency (HKD, AED, SGD, etc.)
+        let amount = payment.total_amount || 0;
+        let currency = (payment.currency || 'usd').toLowerCase();
+        try {
+          const detail = await dodo.payments.retrieve(paymentId);
+          if (detail.settlement_amount) {
+            amount = detail.settlement_amount;
+            currency = (detail.settlement_currency || currency).toLowerCase();
+          }
+        } catch {
+          // fall back to list amount if retrieve fails
+        }
+
         await run(
           `INSERT INTO conversions (
             site_id, session_id, visitor_id, payment_intent_id,
@@ -134,8 +148,8 @@ export async function syncDodoPayments() {
             visitorId,
             paymentId,
             payment.customer?.email || null,
-            payment.total_amount || 0,
-            (payment.currency || 'usd').toLowerCase(),
+            amount,
+            currency,
             utmSource,
             utmMedium,
             utmCampaign,
@@ -155,6 +169,15 @@ export async function syncDodoPayments() {
       for (const conv of recentDodoConversions) {
         try {
           const payment = await dodo.payments.retrieve(conv.payment_intent_id);
+          // Fix any existing rows stored in customer billing currency instead of settlement currency
+          if (payment.settlement_amount) {
+            const settleAmount = payment.settlement_amount;
+            const settleCurrency = (payment.settlement_currency || payment.currency || 'usd').toLowerCase();
+            await run(
+              'UPDATE conversions SET amount = ?, currency = ? WHERE payment_intent_id = ? AND site_id = ? AND (amount != ? OR currency != ?)',
+              [settleAmount, settleCurrency, conv.payment_intent_id, site.id, settleAmount, settleCurrency]
+            );
+          }
           if (payment?.refund_status) {
             const updated = await run(
               "UPDATE conversions SET status = 'refunded' WHERE payment_intent_id = ? AND site_id = ? AND status = 'completed' AND payment_provider = 'dodo'",

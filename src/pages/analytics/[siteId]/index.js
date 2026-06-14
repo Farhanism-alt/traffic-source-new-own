@@ -10,6 +10,7 @@ import RealtimeUsers from '@/components/ui/RealtimeUsers';
 import InsightsPanel from '@/components/InsightsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useFilters } from '@/contexts/FilterContext';
+import { useDateRange } from '@/contexts/DateRangeContext';
 import { getCountryName, buildPageHref } from '@/lib/formatters';
 import CountryFlag from '@/components/ui/CountryFlag';
 import TechIcon from '@/components/ui/TechIcon';
@@ -31,6 +32,7 @@ export default function Analytics() {
   const router = useRouter();
   const { siteId } = router.query;
   const { filters, setFilter, removeFilter, clearFilters, hasFilters } = useFilters();
+  const { period: activePeriod, customRange } = useDateRange();
   const [spikeDay, setSpikeDay] = useState(null);
   const [dayBuyers, setDayBuyers] = useState(null);
   const [selectedConversion, setSelectedConversion] = useState(null);
@@ -611,7 +613,8 @@ export default function Analytics() {
 
       <InsightsPanel
         siteId={siteId}
-        period={filters.period || '7D'}
+        period={activePeriod || '30d'}
+        customRange={customRange}
         open={insightsPanelOpen}
         onClose={() => setInsightsPanelOpen(false)}
       />

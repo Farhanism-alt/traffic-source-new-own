@@ -9,7 +9,7 @@ export default withAuth(async function handler(req, res) {
   const site = await verifySiteOwnership(siteId, req.user.userId);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const { period = '7D' } = req.body || {};
+  const { period = '30d', customRange } = req.body || {};
 
   // Create table if not exists
   await run(`
@@ -25,9 +25,10 @@ export default withAuth(async function handler(req, res) {
     CREATE INDEX IF NOT EXISTS idx_ai_insights_site ON ai_insights(site_id, created_at DESC)
   `);
 
-  // Parse date range from period (lowercase for parseDateRange)
-  const periodLower = period.toLowerCase().replace('d', 'd').replace('m', 'm');
-  const { from, to } = parseDateRange({ period: periodLower });
+  // Parse date range — respect custom range if provided
+  const { from, to } = (customRange?.from && customRange?.to)
+    ? { from: customRange.from, to: customRange.to }
+    : parseDateRange({ period: period.toLowerCase() });
 
   // Collect analytics data in parallel
   const [topSources, topPages, topCountries, convTotals, revenueBySource, stats, timeSeries] = await Promise.all([
@@ -71,63 +72,9 @@ export default withAuth(async function handler(req, res) {
   const st = stats || {};
   const ct = convTotals || {};
 
-  const userMessage = `Site: ${site.domain}
-Period: ${period} (${from} to ${to})
+  const userMessage = `Site: ${site.domain}\nPeriod: ${period} (${from} to ${to})\n\nTRAFFIC STATS:\n- Visitors: ${st.visitors || 0}, Sessions: ${st.sessions || 0}\n- Bounce rate: ${st.bounce_rate || 0}%, Avg session: ${Math.round(st.avg_duration || 0)}s\n\nTOP SOURCES (source | sessions | bounce%):\n${sourcesText}\n\nTOP PAGES (page | views):\n${pagesText}\n\nTOP COUNTRIES (country | sessions):\n${countriesText}\n\nCONVERSIONS:\n- Total: ${ct.conversions || 0}, Revenue: $${((ct.revenue || 0) / 100).toFixed(2)} (amounts in cents)\n- Avg value: $${((ct.avg_value || 0) / 100).toFixed(2)}\n\nREVENUE BY SOURCE (source | conversions | revenue cents):\n${convBySourceText}\n\nDAILY VISITORS (last 7 entries):\n${timeSeriesLast7}`;
 
-TRAFFIC STATS:
-- Visitors: ${st.visitors || 0}, Sessions: ${st.sessions || 0}
-- Bounce rate: ${st.bounce_rate || 0}%, Avg session: ${Math.round(st.avg_duration || 0)}s
-
-TOP SOURCES (source | sessions | bounce%):
-${sourcesText}
-
-TOP PAGES (page | views):
-${pagesText}
-
-TOP COUNTRIES (country | sessions):
-${countriesText}
-
-CONVERSIONS:
-- Total: ${ct.conversions || 0}, Revenue: $${((ct.revenue || 0) / 100).toFixed(2)} (amounts in cents)
-- Avg value: $${((ct.avg_value || 0) / 100).toFixed(2)}
-
-REVENUE BY SOURCE (source | conversions | revenue cents):
-${convBySourceText}
-
-DAILY VISITORS (last 7 entries):
-${timeSeriesLast7}`;
-
-  const systemPrompt = `You are an honest analytics expert helping a SaaS founder understand their website performance.
-Analyze the data and return ONLY valid JSON with no extra text.
-Be direct, simple English, no corporate fluff. Short bullets. Specific numbers from the data.
-
-Return this exact JSON structure:
-{
-  "overall_health": <0-100 integer>,
-  "period_summary": "<1 honest sentence about the period overall>",
-  "insights": [
-    {
-      "id": "traffic_quality",
-      "title": "Traffic Quality",
-      "emoji": "📊",
-      "score": <0-100>,
-      "score_label": "<Good|Fair|Needs Work>",
-      "summary": "<1-2 honest sentences with specific numbers>",
-      "bullets": ["<specific finding>", "<specific finding>", "<specific finding>"],
-      "tips": [
-        {
-          "tip": "<specific actionable tip>",
-          "ai_prompt": "<a ready-to-use prompt the founder can copy and paste to an AI to implement this tip for their product>"
-        }
-      ]
-    }
-  ]
-}
-
-The insights array must have EXACTLY 6 items with IDs in this order:
-traffic_quality, conversion_leak, untapped_geo, revenue_attribution, trend_anomaly, page_impact
-
-Each insight must have 3 bullets and 2 tips. Each tip must have an ai_prompt that is a detailed, ready-to-copy prompt.`;
+  const systemPrompt = `You are an honest analytics expert helping a SaaS founder understand their website performance.\nAnalyze the data and return ONLY valid JSON with no extra text.\nBe direct, simple English, no corporate fluff. Short bullets. Specific numbers from the data.\n\nReturn this exact JSON structure:\n{\n  "overall_health": <0-100 integer>,\n  "period_summary": "<1 honest sentence about the period overall>",\n  "insights": [\n    {\n      "id": "traffic_quality",\n      "title": "Traffic Quality",\n      "emoji": "📊",\n      "score": <0-100>,\n      "score_label": "<Good|Fair|Needs Work>",\n      "summary": "<1-2 honest sentences with specific numbers>",\n      "bullets": ["<specific finding>", "<specific finding>", "<specific finding>"],\n      "tips": [\n        {\n          "tip": "<specific actionable tip>",\n          "ai_prompt": "<a ready-to-use prompt the founder can copy and paste to an AI to implement this tip for their product>"\n        }\n      ]\n    }\n  ]\n}\n\nThe insights array must have EXACTLY 6 items with IDs in this order:\ntraffic_quality, conversion_leak, untapped_geo, revenue_attribution, trend_anomaly, page_impact\n\nEach insight must have 3 bullets and 2 tips. Each tip must have an ai_prompt that is a detailed, ready-to-copy prompt.`;
 
   // Call DeepSeek V3
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -167,11 +114,23 @@ Each insight must have 3 bullets and 2 tips. Each tip must have an ai_prompt tha
     return res.status(502).json({ error: 'Failed to parse AI response as JSON', raw: rawContent.slice(0, 500) });
   }
 
+  // Bundle chart data alongside AI insights (saved to DB so Recent view shows charts too)
+  const fullData = {
+    ...insightsJson,
+    chart_data: {
+      sources: topSources || [],
+      countries: topCountries || [],
+      time_series: timeSeries || [],
+      pages: topPages || [],
+      revenue_by_source: revenueBySource || [],
+    },
+  };
+
   // Save to DB
   const saved = await getRow(
     `INSERT INTO ai_insights (site_id, period, insights) VALUES (?, ?, ?) RETURNING id`,
-    [siteId, period, JSON.stringify(insightsJson)]
+    [siteId, period, JSON.stringify(fullData)]
   );
 
-  return res.json({ id: saved?.id, period, from, to, ...insightsJson });
+  return res.json({ id: saved?.id, period, from, to, ...fullData });
 });

@@ -1,6 +1,6 @@
 import { withAuth } from '@/lib/withAuth';
 import { getRow } from '@/lib/db';
-import { getUserConnection, getDecryptedRefreshToken, refreshAccessToken, listGscProperties } from '@/lib/gsc';
+import { getUserConnection, getAccessTokenForUser, listGscProperties } from '@/lib/gsc';
 
 export default withAuth(async function handler(req, res) {
   const { id } = req.query;
@@ -14,7 +14,7 @@ export default withAuth(async function handler(req, res) {
   if (!conn) return res.status(400).json({ error: 'Google account not connected. Connect it in Settings → Integrations.' });
 
   try {
-    const accessToken = await refreshAccessToken(getDecryptedRefreshToken(conn));
+    const accessToken = await getAccessTokenForUser(req.user.userId);
     const all = await listGscProperties(accessToken);
     const properties = all.filter((p) => propertyMatchesDomain(p.siteUrl, site.domain));
     return res.status(200).json({ properties, siteDomain: site.domain });

@@ -136,7 +136,30 @@ export async function querySearchAnalytics({ accessToken, property, startDate, e
 // ───── user-level Google connection ─────
 
 export async function getUserConnection(userId) {
-  return getRow('SELECT * FROM gsc_connections WHERE user_id = ?', [userId]);
+  const conn = await getRow('SELECT * FROM gsc_connections WHERE user_id = ?', [userId]);
+  if (conn) return conn;
+  // Fall back to google_tokens (new implicit-flow, no refresh token)
+  const tok = await getRow(
+    `SELECT * FROM google_tokens WHERE user_id = ? AND token_expires_at > NOW()`,
+    [userId]
+  );
+  if (!tok) return null;
+  return { user_id: tok.user_id, google_email: tok.google_email, refresh_token: null };
+}
+
+// Returns a valid access token from either token source.
+// Tries google_tokens (unexpired) first, then refreshes via gsc_connections.
+export async function getAccessTokenForUser(userId) {
+  const tok = await getRow(
+    `SELECT access_token FROM google_tokens WHERE user_id = ? AND token_expires_at > NOW()`,
+    [userId]
+  );
+  if (tok) return tok.access_token;
+  const conn = await getRow('SELECT refresh_token FROM gsc_connections WHERE user_id = ?', [userId]);
+  if (!conn) return null;
+  const decrypted = getDecryptedRefreshToken(conn);
+  if (!decrypted) return null;
+  return refreshAccessToken(decrypted);
 }
 
 export async function saveUserConnection({ userId, refreshToken, googleEmail }) {
@@ -185,6 +208,6 @@ export async function linkSiteProperty(siteId, property) {
 
 export async function unlinkSite(siteId) {
   await run('DELETE FROM gsc_site_links WHERE site_id = ?', [siteId]);
-  await run('DELETE FROM gsc_daily WHERE site_id = ?', [siteId]);
+  await run('DELETE FROM gsc_daily WHERE site_id = ?', [sid]);
   await run('DELETE FROM gsc_trends WHERE site_id = ?', [siteId]);
 }

@@ -2,10 +2,8 @@ import { getRow, getRows, run, getPool } from './db';
 import {
   getSiteLink,
   getUserConnection,
-  getDecryptedRefreshToken,
-  refreshAccessToken,
+  getAccessTokenForUser,
   querySearchAnalytics,
-  isGscConfigured,
 } from './gsc';
 
 function fmtDate(d) {
@@ -40,7 +38,8 @@ export async function syncSite(siteId, { backfill = false } = {}) {
 
   let accessToken;
   try {
-    accessToken = await refreshAccessToken(getDecryptedRefreshToken(userConn));
+    accessToken = await getAccessTokenForUser(site.user_id);
+    if (!accessToken) throw new Error('No valid access token available');
   } catch (err) {
     await run("UPDATE gsc_site_links SET status='error', last_error=? WHERE site_id=?", [
       err.message,
@@ -219,7 +218,6 @@ export async function computeTrends(siteId) {
 }
 
 export async function syncAllConnections() {
-  if (!(await isGscConfigured())) return { skipped: 'not configured' };
   const conns = await getRows('SELECT site_id, last_sync_at FROM gsc_site_links');
   const results = [];
   for (const c of conns) {

@@ -121,18 +121,17 @@ function GscIntegrationInner() {
   useEffect(() => { load(); }, []);
 
   const login = useGoogleLogin({
+    flow: 'auth-code',
     scope: 'https://www.googleapis.com/auth/webmasters.readonly',
-    onSuccess: async (tokenResponse) => {
+    access_type: 'offline',
+    onSuccess: async (codeResponse) => {
       setSaving(true);
       setErr('');
       try {
         const r = await fetch('/api/settings/integrations/gsc/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            access_token: tokenResponse.access_token,
-            expires_in: tokenResponse.expires_in || 3600,
-          }),
+          body: JSON.stringify({ code: codeResponse.code }),
         });
         const d = await r.json();
         if (r.ok) {

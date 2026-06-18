@@ -138,23 +138,56 @@ export async function querySearchAnalytics({ accessToken, property, startDate, e
 export async function getUserConnection(userId) {
   const conn = await getRow('SELECT * FROM gsc_connections WHERE user_id = ?', [userId]);
   if (conn) return conn;
-  // Fall back to google_tokens (new implicit-flow, no refresh token)
-  const tok = await getRow(
-    `SELECT * FROM google_tokens WHERE user_id = ? AND token_expires_at > NOW()`,
-    [userId]
-  );
+  const tok = await getRow(`SELECT * FROM google_tokens WHERE user_id = ?`, [userId]);
   if (!tok) return null;
-  return { user_id: tok.user_id, google_email: tok.google_email, refresh_token: null };
+  const expired = new Date(tok.token_expires_at) < new Date();
+  if (expired && !tok.refresh_token) return null;
+  return { user_id: tok.user_id, google_email: tok.google_email, refresh_token: tok.refresh_token || null };
+}
+
+async function refreshGoogleTokenFromEnv(refreshToken) {
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error('Google OAuth not configured');
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!res.ok) throw new Error(`Google token refresh failed: ${await res.text()}`);
+  const data = await res.json();
+  if (!data.access_token) throw new Error('No access_token in refresh response');
+  return data.access_token;
 }
 
 // Returns a valid access token from either token source.
-// Tries google_tokens (unexpired) first, then refreshes via gsc_connections.
+// Tries google_tokens first (or refreshes if expired), then gsc_connections.
 export async function getAccessTokenForUser(userId) {
   const tok = await getRow(
-    `SELECT access_token FROM google_tokens WHERE user_id = ? AND token_expires_at > NOW()`,
+    `SELECT access_token, token_expires_at, refresh_token FROM google_tokens WHERE user_id = ?`,
     [userId]
   );
-  if (tok) return tok.access_token;
+  if (tok) {
+    const expired = new Date(tok.token_expires_at) < new Date();
+    if (!expired) return tok.access_token;
+    if (tok.refresh_token) {
+      try {
+        const decryptedRefresh = decrypt(tok.refresh_token);
+        const newToken = await refreshGoogleTokenFromEnv(decryptedRefresh);
+        const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+        await run(
+          `UPDATE google_tokens SET access_token = ?, token_expires_at = ? WHERE user_id = ?`,
+          [newToken, expiresAt, userId]
+        );
+        return newToken;
+      } catch {}
+    }
+  }
   const conn = await getRow('SELECT refresh_token FROM gsc_connections WHERE user_id = ?', [userId]);
   if (!conn) return null;
   const decrypted = getDecryptedRefreshToken(conn);
@@ -208,6 +241,6 @@ export async function linkSiteProperty(siteId, property) {
 
 export async function unlinkSite(siteId) {
   await run('DELETE FROM gsc_site_links WHERE site_id = ?', [siteId]);
-  await run('DELETE FROM gsc_daily WHERE site_id = ?', [sid]);
+  await run('DELETE FROM gsc_daily WHERE site_id = ?', [siteId]);
   await run('DELETE FROM gsc_trends WHERE site_id = ?', [siteId]);
 }

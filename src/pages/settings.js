@@ -80,6 +80,25 @@ function GoogleLogo() {
 }
 
 function GscIntegration() {
+  if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Google Search Console</h3>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+            Connect your Google account to sync keyword and search performance data from Search Console.
+          </p>
+        </div>
+        <div style={{ padding: '12px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text-muted)' }}>
+          Add <code style={{ fontSize: 12 }}>NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> to your environment variables to enable this integration.
+        </div>
+      </div>
+    );
+  }
+  return <GscIntegrationInner />;
+}
+
+function GscIntegrationInner() {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState('');

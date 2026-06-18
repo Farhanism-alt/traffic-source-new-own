@@ -146,8 +146,8 @@ export async function getUserConnection(userId) {
 }
 
 async function refreshGoogleTokenFromEnv(refreshToken) {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
   if (!clientId || !clientSecret) throw new Error('Google OAuth not configured');
   const res = await fetch(TOKEN_URL, {
     method: 'POST',

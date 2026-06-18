@@ -37,8 +37,8 @@ export default withAuth(async function handler(req, res) {
     const { code } = req.body || {};
     if (!code) return res.status(400).json({ error: 'code required' });
 
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const clientId = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
+    const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
     if (!clientId || !clientSecret) {
       return res.status(500).json({ error: 'GOOGLE_CLIENT_SECRET not configured on server' });
     }
@@ -58,7 +58,9 @@ export default withAuth(async function handler(req, res) {
       });
       if (!tokenRes.ok) {
         const errText = await tokenRes.text();
-        return res.status(400).json({ error: `Token exchange failed: ${errText}` });
+        // Include the client_id suffix so a client_id/secret mismatch is easy to spot
+        const idHint = `${clientId.slice(0, 12)}...`;
+        return res.status(400).json({ error: `Token exchange failed (using client_id ${idHint}): ${errText}` });
       }
       tokenData = await tokenRes.json();
     } catch (err) {

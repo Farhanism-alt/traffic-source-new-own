@@ -100,6 +100,66 @@ export default function Analytics() {
     return () => document.removeEventListener('keydown', onKey);
   }, [chartFullscreen]);
 
+  const exportCSV = useCallback(() => {
+    if (!data) return;
+    const rows = [];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+    rows.push(['=== SUMMARY ===']);
+    rows.push(['Metric', 'Value']);
+    rows.push(['Visitors', data.current?.visitors ?? 0]);
+    rows.push(['Sessions', data.current?.sessions ?? 0]);
+    rows.push(['Page Views', data.current?.pageViews ?? 0]);
+    rows.push(['Bounce Rate (%)', data.current?.bounceRate ?? 0]);
+    rows.push(['Avg Duration (s)', data.current?.avgDuration ?? 0]);
+    rows.push(['New Visitors', data.newVisitors ?? 0]);
+    rows.push(['Returning Visitors', data.returningVisitors ?? 0]);
+    rows.push(['Revenue ($)', ((data.conversions?.totals?.revenue ?? 0) / 100).toFixed(2)]);
+    rows.push(['Conversions', data.conversions?.totals?.conversions ?? 0]);
+    rows.push(['Conversion Rate (%)', data.conversions?.totals?.conversionRate ?? 0]);
+    rows.push([]);
+
+    const section = (title, headers, items) => {
+      if (!items?.length) return;
+      rows.push([`=== ${title} ===`]);
+      rows.push(headers);
+      items.forEach(r => rows.push(r));
+      rows.push([]);
+    };
+
+    section('TOP PAGES', ['Page', 'Views', 'Visitors'],
+      data.pages?.map(p => [p.name, p.views, p.visitors]));
+    section('TRAFFIC SOURCES', ['Source', 'Sessions', 'Visitors'],
+      data.sources?.map(s => [s.name || 'Direct', s.sessions, s.visitors]));
+    section('COUNTRIES', ['Country', 'Visitors'],
+      data.countries?.map(c => [c.name, c.count]));
+    section('CITIES', ['City', 'Visitors'],
+      data.cities?.map(c => [c.name, c.count]));
+    section('BROWSERS', ['Browser', 'Visitors'],
+      data.browsers?.map(b => [b.name, b.count]));
+    section('OPERATING SYSTEMS', ['OS', 'Visitors'],
+      data.os?.map(o => [o.name, o.count]));
+    section('DEVICES', ['Device', 'Visitors'],
+      data.devices?.map(d => [d.name, d.count]));
+    section('ENTRY PAGES', ['Page', 'Sessions', 'Bounce Rate (%)'],
+      data.entryPages?.map(p => [p.name, p.sessions, p.bounce_rate]));
+    section('REVENUE BY SOURCE', ['Source', 'Revenue ($)', 'Conversions'],
+      data.conversions?.bySource?.map(c => [c.name || 'Direct', ((c.revenue ?? 0) / 100).toFixed(2), c.conversions]));
+    section('DAILY TRAFFIC', ['Date', 'Visitors', 'Sessions', 'Page Views'],
+      data.timeSeries?.map(d => [d.date, d.visitors, d.sessions, d.pageViews]));
+
+    const csv = rows.map(r => r.map(v => esc(v)).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const site = data.site?.domain || data.site?.name || siteId;
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `${site}-analytics-${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [data, siteId]);
+
   const syncButton = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {syncMsg && (
@@ -113,6 +173,18 @@ export default function Analytics() {
         style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, color: '#a78bfa', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
       >
         ✨ AI Insights
+      </button>
+      <button
+        onClick={exportCSV}
+        title="Export analytics data as CSV"
+        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Export CSV
       </button>
       <button
         onClick={syncPayments}

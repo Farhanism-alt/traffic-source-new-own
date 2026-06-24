@@ -6,6 +6,9 @@ export function parseDateRange(query) {
     return { from, to };
   }
   const now = new Date();
+  if (period === 'all') {
+    return { from: '2000-01-01', to: now.toISOString().slice(0, 10) };
+  }
   const periods = {
     '24h': 1,
     '7d': 7,

@@ -12,6 +12,7 @@ const periods = [
   { value: '30d', label: '1M' },
   { value: '90d', label: '3M' },
   { value: '12m', label: '1Y' },
+  { value: 'all', label: 'All' },
 ];
 
 export default function DashboardLayout({ children, siteId, siteName, siteDomain, headerActions }) {
@@ -69,6 +70,12 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                     className={`app-nav-link ${path.includes('/funnels') ? 'active' : ''}`}
                   >
                     Funnels
+                  </Link>
+                  <Link
+                    href={`/analytics/${siteId}/headspot`}
+                    className={`app-nav-link ${path.includes('/headspot') ? 'active' : ''}`}
+                  >
+                    Head Spot
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/gsc`}

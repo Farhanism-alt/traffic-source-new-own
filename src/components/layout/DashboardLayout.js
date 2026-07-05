@@ -78,6 +78,12 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                     Head Spot
                   </Link>
                   <Link
+                    href={`/analytics/${siteId}/bot-traffic`}
+                    className={`app-nav-link ${path.includes('/bot-traffic') ? 'active' : ''}`}
+                  >
+                    Bot Traffic
+                  </Link>
+                  <Link
                     href={`/analytics/${siteId}/gsc`}
                     className={`app-nav-link ${path.includes('/gsc') ? 'active' : ''}`}
                   >

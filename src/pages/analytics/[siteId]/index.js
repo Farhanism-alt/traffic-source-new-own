@@ -43,6 +43,8 @@ export default function Analytics() {
   const [syncMsg, setSyncMsg] = useState('');
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
   const { data, loading, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
+  const { data: botData } = useAnalytics('bot-traffic');
+  const botCrawlers = (botData?.crawlers || []).map(c => ({ name: c.crawler_name || c.crawler_token, count: Number(c.count) }));
 
   const syncPayments = useCallback(async () => {
     if (syncing || !siteId) return;
@@ -549,21 +551,23 @@ export default function Analytics() {
               { key: 'browser', label: 'Browser' },
               { key: 'os', label: 'OS' },
               { key: 'device', label: 'Device' },
+              { key: 'bot', label: 'Bot' },
             ]}
             data={{
               browser: data.browsers || [],
               os: data.os || [],
               device: data.devices || [],
+              bot: botCrawlers,
             }}
             renderLabel={(row, meta) => (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <TechIcon type={meta.activeTab} name={row.name} />
+                {meta.activeTab !== 'bot' && <TechIcon type={meta.activeTab} name={row.name} />}
                 {row.name}
               </span>
             )}
             showPercentage
             defaultTab="browser"
-            onRowClick={(row, tab) => toggleFilter(techTabToFilter[tab], row.name)}
+            onRowClick={(row, tab) => { if (tab !== 'bot') toggleFilter(techTabToFilter[tab], row.name); }}
             activeFilter={{
               tab: filters.browser ? 'browser' : filters.os ? 'os' : filters.device ? 'device' : null,
               value: filters.browser || filters.os || filters.device,

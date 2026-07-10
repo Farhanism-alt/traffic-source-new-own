@@ -6,24 +6,35 @@ import { useDateRange } from '@/contexts/DateRangeContext';
 
 const CATEGORY_LABELS = { all: 'All', answers: 'AI Answers', indexing: 'Indexing', training: 'Training', other: 'Other' };
 
-const PROVIDER_COLORS = {
-  OpenAI: '#10a37f', Anthropic: '#cc785c', Google: '#4285f4',
-  Microsoft: '#00a4ef', Perplexity: '#20b2aa', Meta: '#1877f2',
-  xAI: '#9ca3af', Mistral: '#ff7000', ByteDance: '#ff0050',
-  Amazon: '#ff9900', DuckDuckGo: '#de5833', Apple: '#6b7280',
-  Yandex: '#ffcc00', Baidu: '#2932e1', Alibaba: '#ff6a00',
-  'Moonshot AI': '#6366f1', Cohere: '#39a587', 'Common Crawl': '#4a5568',
-  Huawei: '#cf0a2c', Semrush: '#ff642d', Ahrefs: '#f09933',
-  Majestic: '#003366', Sogou: '#e02b20', Webhose: '#5a4bda',
-  Diffbot: '#1a73e8', 'Internet Archive': '#444',
+const PROVIDER_DOMAINS = {
+  OpenAI: 'openai.com', Anthropic: 'anthropic.com', Google: 'google.com',
+  Microsoft: 'microsoft.com', Perplexity: 'perplexity.ai', Meta: 'meta.com',
+  xAI: 'x.ai', Mistral: 'mistral.ai', ByteDance: 'bytedance.com',
+  Amazon: 'amazon.com', DuckDuckGo: 'duckduckgo.com', Apple: 'apple.com',
+  Yandex: 'yandex.com', Baidu: 'baidu.com', Alibaba: 'alibaba.com',
+  'Moonshot AI': 'moonshot.cn', Cohere: 'cohere.com', 'Common Crawl': 'commoncrawl.org',
+  Huawei: 'huawei.com', Semrush: 'semrush.com', Ahrefs: 'ahrefs.com',
+  Majestic: 'majestic.com', Sogou: 'sogou.com', Webhose: 'webz.io',
+  Diffbot: 'diffbot.com', 'Internet Archive': 'archive.org',
 };
 
 function ProviderDot({ provider }) {
-  const color = PROVIDER_COLORS[provider] || '#6b7280';
+  const domain = PROVIDER_DOMAINS[provider];
   const initials = (provider || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const [failed, setFailed] = useState(false);
   return (
-    <div className="bt-provider-dot" style={{ background: color + '20', border: `1.5px solid ${color}50`, color }}>
-      {initials}
+    <div className="bt-provider-dot">
+      {domain && !failed ? (
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+          alt=""
+          width={20}
+          height={20}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span>{initials}</span>
+      )}
     </div>
   );
 }
@@ -115,7 +126,7 @@ export const config = {
   return (
     <>
       <Head>
-        <title>Bot Traffic – {site?.name || 'Traffic Source'}</title>
+        <title>Bot Traffic – {site?.name || 'SAC MAC'}</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={site?.name} siteDomain={site?.domain}>
 
@@ -352,7 +363,7 @@ function SetupPanel({ snippet }) {
         <div className="bt-setup">
           <p className="bt-setup-intro">
             Paste this snippet into your website&rsquo;s <code>middleware.js</code> (or <code>middleware.ts</code>) file.
-            It detects known bot user agents and sends a non-blocking event to Traffic Source.
+            It detects known bot user agents and sends a non-blocking event to SAC MAC.
             Your site response time is unaffected — the tracking call runs in the background.
           </p>
 

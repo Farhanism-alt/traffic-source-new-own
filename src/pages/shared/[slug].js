@@ -9,6 +9,7 @@ import CountryFlag from '@/components/ui/CountryFlag';
 import TechIcon from '@/components/ui/TechIcon';
 import ChannelIcon from '@/components/ui/ChannelIcon';
 import { useTheme } from '@/contexts/ThemeContext';
+import AppLogoMark from '@/components/ui/AppLogoMark';
 
 const periods = [
   { value: '24h', label: '1D' },
@@ -57,7 +58,7 @@ export default function PublicAnalytics() {
   if (error) {
     return (
       <>
-        <Head><title>Analytics - Traffic Source</title></Head>
+        <Head><title>Analytics - SAC MAC</title></Head>
         <div className="app-layout">
           <div className="app-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
             <div style={{ textAlign: 'center' }}>
@@ -73,7 +74,7 @@ export default function PublicAnalytics() {
   if (loading || !data) {
     return (
       <>
-        <Head><title>Analytics - Traffic Source</title></Head>
+        <Head><title>Analytics - SAC MAC</title></Head>
         <div className="app-layout">
           <div className="app-content">
             <div className="loading-inline"><div className="loading-spinner" /></div>
@@ -92,10 +93,8 @@ export default function PublicAnalytics() {
         <header className="app-header">
           <div className="app-header-left">
             <span className="app-logo" style={{ cursor: 'default' }}>
-              <svg width="22" height="22" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M49.501 8.249L38.251 20.75h-5l-11.25 12.499H17l-11.25 12.5V2H2v60h60V8.249H49.501M27.626 56.375h-9.688V35.124h9.688v21.251m16.25 0h-9.688v-33.75h9.688v33.75m16.249 0h-9.687V10.124h9.687v46.251"/>
-              </svg>
-              Traffic Source
+              <AppLogoMark size={22} />
+              SAC MAC
             </span>
           </div>
           <div className="app-header-right">
@@ -228,7 +227,7 @@ export default function PublicAnalytics() {
           </div>
 
           <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: 'var(--text-muted)' }}>
-            Powered by <a href="https://github.com/mddanishyusuf/traffic-source" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text)', fontWeight: 600 }}>Traffic Source</a>
+            Powered by <a href="https://github.com/mddanishyusuf/traffic-source" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text)', fontWeight: 600 }}>SAC MAC</a>
           </div>
         </main>
       </div>

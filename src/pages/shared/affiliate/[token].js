@@ -155,7 +155,7 @@ export default function SharedAffiliateDashboard() {
         )}
 
         <div className="shared-footer">
-          Powered by Traffic Source
+          Powered by SAC MAC
         </div>
       </div>
     </div>

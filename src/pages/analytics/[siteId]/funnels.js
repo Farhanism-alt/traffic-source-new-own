@@ -111,7 +111,7 @@ export default function FunnelsPage() {
 
   return (
     <>
-      <Head><title>Funnels - Traffic Source</title></Head>
+      <Head><title>Funnels - SAC MAC</title></Head>
       <DashboardLayout siteId={siteId}>
         <div className="funnels-layout">
           {/* Sidebar */}

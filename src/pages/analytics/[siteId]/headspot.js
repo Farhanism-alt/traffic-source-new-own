@@ -76,7 +76,7 @@ export default function HeadSpot() {
   return (
     <>
       <Head>
-        <title>Head Spot – {site?.name || site?.domain || 'Traffic Source'}</title>
+        <title>Head Spot – {site?.name || site?.domain || 'SAC MAC'}</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={site?.name} siteDomain={site?.domain}>
         {loading ? (

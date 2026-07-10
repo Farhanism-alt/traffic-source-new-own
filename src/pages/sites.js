@@ -62,7 +62,7 @@ export default function Sites() {
     if (view === 'overview') {
         return (
             <>
-                <Head><title>Overview - Traffic Source</title></Head>
+                <Head><title>Overview - SAC MAC</title></Head>
                 <ProtectedRoute>
                     <OverviewDashboard onClose={() => setView('sites')} />
                 </ProtectedRoute>
@@ -73,7 +73,7 @@ export default function Sites() {
     return (
         <>
             <Head>
-                <title>Sites - Traffic Source</title>
+                <title>Sites - SAC MAC</title>
             </Head>
             <DashboardLayout>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -448,7 +448,7 @@ function OverviewDashboard({ onClose }) {
                         <span>Payments</span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             {data.recentPayments.length} recent
-                            <span style={{ marginLeft: 6 }}>{showPayments ? '\u25BC' : '\u25B2'}</span>
+                            <span style={{ marginLeft: 6 }}>{showPayments ? '▼' : '▲'}</span>
                         </span>
                     </button>
 

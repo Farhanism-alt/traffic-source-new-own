@@ -21,7 +21,7 @@ export default function Settings() {
   return (
     <>
       <Head>
-        <title>Settings - Traffic Source</title>
+        <title>Settings - SAC MAC</title>
       </Head>
       <DashboardLayout>
         <h2 className="page-title">Account Settings</h2>

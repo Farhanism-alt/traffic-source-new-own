@@ -16,7 +16,7 @@ export default withAuth(async function handler(req, res) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  const trackingSnippet = `<!-- Traffic Source Analytics -->
+  const trackingSnippet = `<!-- SAC MAC Analytics -->
 <script defer src="${appUrl}/t.js" data-site="${site.id}"></script>`;
 
   const stripeSnippet = `// In your checkout API route, pass the tracking cookies as metadata:

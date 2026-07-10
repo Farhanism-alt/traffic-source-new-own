@@ -259,7 +259,7 @@ export default function SiteSettings() {
   if (loading || !site) {
     return (
       <>
-        <Head><title>Settings - Traffic Source</title></Head>
+        <Head><title>Settings - SAC MAC</title></Head>
         <DashboardLayout siteId={siteId}>
           <div className="loading-inline"><div className="loading-spinner" /></div>
         </DashboardLayout>
@@ -270,7 +270,7 @@ export default function SiteSettings() {
   return (
     <>
       <Head>
-        <title>Settings - {site.name} - Traffic Source</title>
+        <title>Settings - {site.name} - SAC MAC</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={site.name} siteDomain={site.domain}>
         <h2 className="page-title">Site Settings</h2>
@@ -302,7 +302,7 @@ export default function SiteSettings() {
                   highlightPatterns={['metadata', 'ts_visitor_id', 'ts_session_id']}
                 />
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                  Traffic Source will automatically sync payments from Stripe. No webhook setup needed.
+                  SAC MAC will automatically sync payments from Stripe. No webhook setup needed.
                 </p>
               </>
             ) : (
@@ -327,7 +327,7 @@ export default function SiteSettings() {
             {stripeError && <div className="auth-error">{stripeError}</div>}
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
               Enter your Stripe Secret Key. You can find it in your Stripe Dashboard under Developers &gt; API keys.
-              Traffic Source will automatically sync your payments &mdash; no webhook setup required.
+              SAC MAC will automatically sync your payments &mdash; no webhook setup required.
             </p>
             <form onSubmit={handleSaveStripe} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
@@ -362,7 +362,7 @@ export default function SiteSettings() {
             {dodoError && <div className="auth-error">{dodoError}</div>}
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
               Enter your Dodo Payments API key. You can find it in your Dodo Dashboard under Developers &gt; API keys.
-              Traffic Source will automatically sync your payments &mdash; no webhook setup required.
+              SAC MAC will automatically sync your payments &mdash; no webhook setup required.
             </p>
             {snippetData?.dodoSnippet && (
               <>
@@ -375,7 +375,7 @@ export default function SiteSettings() {
                   highlightPatterns={['metadata', 'ts_visitor_id', 'ts_session_id']}
                 />
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 16 }}>
-                  Traffic Source will automatically sync payments from Dodo. No webhook setup needed.
+                  SAC MAC will automatically sync payments from Dodo. No webhook setup needed.
                 </p>
               </>
             )}
@@ -412,7 +412,7 @@ export default function SiteSettings() {
             {lsError && <div className="auth-error">{lsError}</div>}
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
               Enter your Lemon Squeezy API key. You can find it in your Lemon Squeezy Dashboard under Settings &gt; API.
-              Traffic Source will automatically sync your orders &mdash; no webhook setup required.
+              SAC MAC will automatically sync your orders &mdash; no webhook setup required.
             </p>
             {snippetData?.lemonSqueezySnippet && (
               <>
@@ -425,7 +425,7 @@ export default function SiteSettings() {
                   highlightPatterns={['checkout_data', 'custom', 'ts_visitor_id', 'ts_session_id']}
                 />
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, marginBottom: 16 }}>
-                  Traffic Source will automatically sync orders from Lemon Squeezy. No webhook setup needed.
+                  SAC MAC will automatically sync orders from Lemon Squeezy. No webhook setup needed.
                 </p>
               </>
             )}

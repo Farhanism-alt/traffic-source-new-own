@@ -206,7 +206,7 @@ export default function Analytics() {
   if (loading || !data) {
     return (
       <>
-        <Head><title>Analytics - Traffic Source</title></Head>
+        <Head><title>Analytics - SAC MAC</title></Head>
         <DashboardLayout siteId={siteId} headerActions={syncButton}>
           <div className="loading-inline"><div className="loading-spinner" /></div>
         </DashboardLayout>
@@ -243,7 +243,7 @@ export default function Analytics() {
   return (
     <>
       <Head>
-        <title>{data.site?.name || 'Analytics'} - Traffic Source</title>
+        <title>{data.site?.name || 'Analytics'} - SAC MAC</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={data.site?.name} siteDomain={data.site?.domain} headerActions={syncButton}>
 

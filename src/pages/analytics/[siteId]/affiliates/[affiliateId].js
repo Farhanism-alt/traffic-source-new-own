@@ -82,7 +82,7 @@ export default function AffiliateDetail() {
   if (loading || !data) {
     return (
       <>
-        <Head><title>Affiliate - Traffic Source</title></Head>
+        <Head><title>Affiliate - SAC MAC</title></Head>
         <DashboardLayout siteId={siteId}>
           <div className="loading-inline"><div className="loading-spinner" /></div>
         </DashboardLayout>
@@ -95,7 +95,7 @@ export default function AffiliateDetail() {
   return (
     <>
       <Head>
-        <title>{affiliate.name} - Affiliates - Traffic Source</title>
+        <title>{affiliate.name} - Affiliates - SAC MAC</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={data.site?.name} siteDomain={data.site?.domain}>
         <div className="page-nav" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

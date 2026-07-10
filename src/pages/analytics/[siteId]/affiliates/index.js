@@ -54,7 +54,7 @@ export default function Affiliates() {
   return (
     <>
       <Head>
-        <title>Affiliates - Traffic Source</title>
+        <title>Affiliates - SAC MAC</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={data?.site?.name} siteDomain={data?.site?.domain}>
         <div className="page-nav">

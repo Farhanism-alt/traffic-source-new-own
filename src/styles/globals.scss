@@ -1007,7 +1007,7 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 .hs-gsc-val { font-size: 26px; font-weight: 700; color: var(--text-heading); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .hs-gsc-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* ── Bot Traffic ──────────────────────────────────────────────────── */
+/* ── Bot Traffic ──────────────────────────────────────────────────────────────────────────────── */
 .bt-header {
   display: flex;
   align-items: flex-start;
@@ -1116,6 +1116,11 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
   font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
+  background: var(--bg-card-hover);
+  border: 1.5px solid var(--border);
+  color: var(--text-heading);
+  overflow: hidden;
+  img { width: 20px; height: 20px; object-fit: contain; }
 }
 .bt-provider-info { flex: 1; min-width: 0; }
 .bt-provider-name { font-size: 14px; font-weight: 600; color: var(--text-heading); margin-bottom: 5px; }

@@ -22,6 +22,7 @@ export default withAuth(async function handler(req, res) {
       [req.user.userId]
     );
     const plan = user?.plan || 'free';
+    res.setHeader('Cache-Control', 'private, max-age=30');
     return res.json({
       plan,
       planName: PLANS[plan]?.name || plan,

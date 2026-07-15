@@ -144,6 +144,7 @@ export default async function handler(req, res) {
     return (((curr - prev) / prev) * 100).toFixed(1);
   }
 
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   res.status(200).json({
     site: { name: site.name, domain: site.domain },
     current: {

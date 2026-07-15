@@ -60,6 +60,7 @@ export default async function handler(req, res) {
       ? Math.round(convStats.revenue * affiliate.commission_rate)
       : 0;
 
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   res.status(200).json({
     affiliate: {
       name: affiliate.name,

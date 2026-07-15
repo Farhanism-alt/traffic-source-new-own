@@ -27,6 +27,7 @@ export default withAuth(async function handler(req, res) {
     if (maskedSite.lemonsqueezy_api_key) {
       maskedSite.lemonsqueezy_api_key = '••••' + maskedSite.lemonsqueezy_api_key.slice(-4);
     }
+    res.setHeader('Cache-Control', 'private, max-age=15');
     return res.status(200).json({ site: maskedSite });
   }
 

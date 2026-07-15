@@ -1,5 +1,5 @@
-import { withAuth } from '@/lib/withAuth';
 import { getRow } from '@/lib/db';
+import { withAuth } from '@/lib/withAuth';
 
 export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -54,6 +54,7 @@ function getCookie(name) {
   return document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1] || '';
 }`;
 
+  res.setHeader('Cache-Control', 'private, max-age=300');
   res.status(200).json({
     site,
     trackingSnippet,

@@ -305,9 +305,26 @@ function OverviewDashboard({ onClose }) {
     }, []);
 
     useEffect(() => {
-        fetchData();
-        intervalRef.current = setInterval(fetchData, 15000);
-        return () => clearInterval(intervalRef.current);
+        const startPolling = () => {
+            if (intervalRef.current) return;
+            fetchData();
+            intervalRef.current = setInterval(fetchData, 30000);
+        };
+        const stopPolling = () => {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        };
+        const onVisibilityChange = () => {
+            if (document.hidden) stopPolling();
+            else startPolling();
+        };
+
+        if (!document.hidden) startPolling();
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            stopPolling();
+        };
     }, [fetchData]);
 
     if (loading) {

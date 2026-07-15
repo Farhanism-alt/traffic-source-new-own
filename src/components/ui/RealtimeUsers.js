@@ -85,9 +85,27 @@ export default function RealtimeUsers({ countries = [] }) {
         }
       } catch {}
     };
-    fetchRealtime();
-    intervalRef.current = setInterval(fetchRealtime, 30000);
-    return () => clearInterval(intervalRef.current);
+
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      fetchRealtime();
+      intervalRef.current = setInterval(fetchRealtime, 60000);
+    };
+    const stopPolling = () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) stopPolling();
+      else startPolling();
+    };
+
+    if (!document.hidden) startPolling();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      stopPolling();
+    };
   }, [siteId]);
 
   if (!data) return null;

@@ -49,48 +49,56 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                   <Link
                     href={`/analytics/${siteId}`}
                     className={`app-nav-link ${path === `/analytics/${siteId}` ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Analytics
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/conversions`}
                     className={`app-nav-link ${path.includes('/conversions') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Conversions
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/affiliates`}
                     className={`app-nav-link ${path.includes('/affiliates') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Affiliates
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/funnels`}
                     className={`app-nav-link ${path.includes('/funnels') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Funnels
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/headspot`}
                     className={`app-nav-link ${path.includes('/headspot') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Head Spot
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/bot-traffic`}
                     className={`app-nav-link ${path.includes('/bot-traffic') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Bot Traffic
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/gsc`}
                     className={`app-nav-link ${path.includes('/gsc') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Search Console
                   </Link>
                   <Link
                     href={`/analytics/${siteId}/settings`}
                     className={`app-nav-link ${path.includes('/settings') && path.includes('/analytics/') ? 'active' : ''}`}
+                    prefetch={false}
                   >
                     Settings
                   </Link>

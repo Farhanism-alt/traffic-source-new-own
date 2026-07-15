@@ -1,4 +1,4 @@
-import { getRow, getRows } from '@/lib/db';
+import { getRows, getRow } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
 import { normalizeSource, getSourceDomains } from '@/lib/sources';
@@ -227,6 +227,7 @@ export default withAuth(async function handler(req, res) {
   const convRate = current.total_sessions > 0 ? ((convTotals.total_conversions / current.total_sessions) * 100).toFixed(2) : 0;
   const pctChange = (curr, prev) => prev === 0 ? (curr > 0 ? 100 : 0) : (((curr - prev) / prev) * 100).toFixed(1);
 
+  res.setHeader('Cache-Control', 'private, max-age=30');
   res.status(200).json({
     site,
     current: { visitors: current.total_visitors, sessions: current.total_sessions, pageViews: current.total_page_views, bounceRate: parseFloat(bounceRate), avgDuration: Math.round(current.avg_duration) },

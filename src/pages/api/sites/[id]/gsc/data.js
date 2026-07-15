@@ -20,6 +20,7 @@ export default withAuth(async function handler(req, res) {
     getSiteLink(id),
   ]);
 
+  res.setHeader('Cache-Control', 'private, max-age=60');
   if (!userConn) return res.status(200).json({ site, googleConnected: false, linked: false });
   if (!link) return res.status(200).json({ site, googleConnected: true, googleEmail: userConn.google_email, linked: false });
 
@@ -179,6 +180,7 @@ export default withAuth(async function handler(req, res) {
   const lost = enriched.filter((r) => r.status === 'lost').sort((a, b) => b.clicks_prev_28d - a.clicks_prev_28d).slice(0, 20);
   const newQueries = enriched.filter((r) => r.status === 'new').sort((a, b) => b.clicks_28d - a.clicks_28d).slice(0, 20);
 
+  res.setHeader('Cache-Control', 'private, max-age=300');
   return res.status(200).json({
     site,
     googleConnected: true,

@@ -18,6 +18,8 @@ export default withAuth(async function handler(req, res) {
     providers: [], crawlers: [], topPages: [], notFoundPages: [], recentVisits: [],
   };
 
+  res.setHeader('Cache-Control', 'private, max-age=30');
+
   try {
     await getRow('SELECT 1 FROM bot_visits LIMIT 1', []);
   } catch {

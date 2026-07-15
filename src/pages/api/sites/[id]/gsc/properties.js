@@ -17,6 +17,7 @@ export default withAuth(async function handler(req, res) {
     const accessToken = await getAccessTokenForUser(req.user.userId);
     const all = await listGscProperties(accessToken);
     const properties = all.filter((p) => propertyMatchesDomain(p.siteUrl, site.domain));
+    res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json({ properties, siteDomain: site.domain });
   } catch (err) {
     return res.status(500).json({ error: err.message });

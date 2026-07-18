@@ -42,7 +42,7 @@ export default function Analytics() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
-  const { data, loading, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
+  const { data, loading, error, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
   const { data: botData } = useAnalytics('bot-traffic');
   const botCrawlers = (botData?.crawlers || []).map(c => ({ name: c.crawler_name || c.crawler_token, count: Number(c.count) }));
 
@@ -202,6 +202,21 @@ export default function Analytics() {
       </button>
     </div>
   );
+
+  if (error && !data) {
+    return (
+      <>
+        <Head><title>Analytics - SAC MAC</title></Head>
+        <DashboardLayout siteId={siteId} headerActions={syncButton}>
+          <div className="empty-state">
+            <h3>Couldn&apos;t load analytics</h3>
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={refetch}>Try again</button>
+          </div>
+        </DashboardLayout>
+      </>
+    );
+  }
 
   if (loading || !data) {
     return (

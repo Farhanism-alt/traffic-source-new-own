@@ -12,6 +12,7 @@ export default function AffiliateDetail() {
   const { getParams } = useDateRange();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [shareToken, setShareToken] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -19,10 +20,14 @@ export default function AffiliateDetail() {
   const fetchData = useCallback(async () => {
     if (!siteId || !affiliateId) return;
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams(getParams());
       const res = await fetch(`/api/analytics/${siteId}/affiliates/${affiliateId}?${params}`);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) throw new Error('Failed to load affiliate data');
+      setData(await res.json());
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -78,6 +83,21 @@ export default function AffiliateDetail() {
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2000);
   };
+
+  if (error && !data) {
+    return (
+      <>
+        <Head><title>Affiliate - SAC MAC</title></Head>
+        <DashboardLayout siteId={siteId}>
+          <div className="empty-state">
+            <h3>Couldn&apos;t load this affiliate</h3>
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={fetchData}>Try again</button>
+          </div>
+        </DashboardLayout>
+      </>
+    );
+  }
 
   if (loading || !data) {
     return (

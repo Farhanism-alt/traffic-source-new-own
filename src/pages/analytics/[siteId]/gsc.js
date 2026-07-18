@@ -17,6 +17,7 @@ export default function GscPage() {
   const { period } = useDateRange();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [propsLoading, setPropsLoading] = useState(false);
   const [properties, setProperties] = useState(null);
   const [propSiteDomain, setPropSiteDomain] = useState('');
@@ -27,9 +28,16 @@ export default function GscPage() {
   const load = useCallback(async () => {
     if (!siteId) return;
     setLoading(true);
-    const r = await fetch(`/api/sites/${siteId}/gsc/data?period=${period}`);
-    if (r.ok) setData(await r.json());
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const r = await fetch(`/api/sites/${siteId}/gsc/data?period=${period}`);
+      if (!r.ok) throw new Error('Failed to load Search Console data');
+      setData(await r.json());
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, [siteId, period]);
 
   useEffect(() => { load(); }, [load]);
@@ -69,6 +77,18 @@ export default function GscPage() {
     setProperties(null);
     load();
   };
+
+  if (loadError && !data) {
+    return (
+      <DashboardLayout siteId={siteId}>
+        <div className="empty-state">
+          <h3>Couldn&apos;t load Search Console data</h3>
+          <p>{loadError}</p>
+          <button className="btn btn-primary" onClick={load}>Try again</button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (loading || !data) {
     return (
@@ -152,9 +172,9 @@ function PropertyPicker({ properties, selectedProp, setSelectedProp, onLink, lin
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Dashboard
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function Dashboard({ data, onUnlink }) {
   const t = data.totals || {};
@@ -210,9 +230,9 @@ function Dashboard({ data, onUnlink }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Metric card
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function MetricCard({ icon: Icon, label, value, cur, prev, invert, days }) {
   const delta = (cur || 0) - (prev || 0);
@@ -238,9 +258,9 @@ function MetricCard({ icon: Icon, label, value, cur, prev, invert, days }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Data table
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function DataTable({ title, subtitle, rows, cols }) {
   return (
@@ -317,9 +337,9 @@ function PageLink({ url }) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Insights tabs
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function InsightsPanel({ data }) {
   const tabs = [
@@ -417,14 +437,14 @@ function insightCols(variant) {
   return [query, clicks, impressions, ctr, pos];
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Helpers
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Keyword Explorer — keyword-centric drill-down
 // (click a keyword to see pages, countries, devices for that exact query)
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function KeywordExplorer({ siteId, period, days, rows }) {
   const [expanded, setExpanded] = useState(null);
@@ -696,9 +716,9 @@ function DeviceSplit({ devices, totalImps }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 // Custom SVG chart — clicks (line+area) + impressions (line)
-// ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────
 
 function GscChart({ data, days = 30 }) {
   const [hover, setHover] = useState(null); // { i, x, y }
@@ -965,7 +985,6 @@ function timeAgo(iso) {
   const t = new Date(iso + 'Z').getTime();
   const diff = (Date.now() - t) / 1000;
   if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 3600) return Math.floor(diff / 3600) + 'h ago';
   return Math.floor(diff / 86400) + 'd ago';
 }

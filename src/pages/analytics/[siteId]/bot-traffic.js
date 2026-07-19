@@ -40,15 +40,8 @@ function ProviderDot({ provider }) {
 }
 
 function CategoryBadge({ category }) {
-  const map = {
-    answers:  { bg: 'rgba(99,102,241,0.15)',  text: '#818cf8' },
-    indexing: { bg: 'rgba(16,163,127,0.15)', text: '#34d399' },
-    training: { bg: 'rgba(245,158,11,0.15)', text: '#fbbf24' },
-    other:    { bg: 'rgba(107,114,128,0.15)',text: '#9ca3af' },
-  };
-  const s = map[category] || map.other;
   return (
-    <span className="bt-cat-badge" style={{ background: s.bg, color: s.text }}>
+    <span className="bt-cat-badge">
       {CATEGORY_LABELS[category] || category}
     </span>
   );
@@ -156,15 +149,15 @@ export const config = {
             {/* Stats strip */}
             <div className="bt-stats-strip">
               {[
-                { label: 'Total Requests', value: stats.total, color: 'var(--text-heading)' },
-                { label: 'AI Answers', value: stats.answers, color: '#818cf8' },
-                { label: 'Indexing', value: stats.indexing, color: '#34d399' },
-                { label: 'Training', value: stats.training, color: '#fbbf24' },
-                { label: 'Other', value: stats.other, color: '#9ca3af' },
-                { label: '404 Signals', value: stats.notFound, color: '#ef4444' },
+                { label: 'Total Requests', value: stats.total },
+                { label: 'AI Answers', value: stats.answers },
+                { label: 'Indexing', value: stats.indexing },
+                { label: 'Training', value: stats.training },
+                { label: 'Other', value: stats.other },
+                { label: '404 Signals', value: stats.notFound },
               ].map(s => (
                 <div key={s.label} className="bt-stat-card">
-                  <div className="bt-stat-value" style={{ color: s.color }}>{(s.value || 0).toLocaleString()}</div>
+                  <div className="bt-stat-value">{(s.value || 0).toLocaleString()}</div>
                   <div className="bt-stat-label">{s.label}</div>
                 </div>
               ))}

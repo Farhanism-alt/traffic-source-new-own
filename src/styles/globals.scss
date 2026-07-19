@@ -1007,7 +1007,7 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
 .hs-gsc-val { font-size: 26px; font-weight: 700; color: var(--text-heading); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .hs-gsc-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* ── Bot Traffic ──────────────────────────────────────────────────────────────────────────────── */
+/* ── Bot Traffic ───────────────────────────────────────────────────────────────────────────────── */
 .bt-header {
   display: flex;
   align-items: flex-start;
@@ -1148,6 +1148,9 @@ a { color: var(--text); text-decoration: none; &:hover { color: var(--text-secon
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  color: var(--text-heading);
 }
 
 .bt-empty {

@@ -195,5 +195,14 @@
     if (location.href !== lastUrl) { lastUrl = location.href; send({ type: 'pageview' }); }
   });
 
+  var existingTs = window.__ts;
   window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track, identify: identify };
+
+  if (existingTs && Array.isArray(existingTs.q)) {
+    for (var i = 0; i < existingTs.q.length; i++) {
+      var cmd = existingTs.q[i];
+      if (cmd && cmd[0] === 'identify') identify(cmd[1]);
+      if (cmd && cmd[0] === 'track') track(cmd[1], cmd[2]);
+    }
+  }
 })();

@@ -98,6 +98,22 @@ export default function PersonFootprintDrawer({ siteId, email, onClose }) {
   const timeline = data?.timeline || [];
   const sessions = data?.sessions || [];
 
+  const identifiedTime = person?.identifiedAt ? new Date(person.identifiedAt).getTime() : 0;
+  let preLoginPagesCount = 0;
+  let postLoginPagesCount = 0;
+  if (identifiedTime > 0) {
+    for (const item of timeline) {
+      if (item.type === 'pageview') {
+        const t = new Date(item.timestamp).getTime();
+        if (t <= identifiedTime) preLoginPagesCount++;
+        else postLoginPagesCount++;
+      }
+    }
+  } else {
+    preLoginPagesCount = 0;
+    postLoginPagesCount = timeline.filter((t) => t.type === 'pageview').length;
+  }
+
   // Group timeline entries by Date
   const groupedTimeline = [];
   let currentDate = null;
@@ -184,63 +200,72 @@ export default function PersonFootprintDrawer({ siteId, email, onClose }) {
           </div>
         ) : (
           <div className="drawer-body" style={{ padding: '0 24px 32px' }}>
-            {/* Quick Metrics Bar */}
+            {/* 4-STAGE END-TO-END USER JOURNEY FLOW */}
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 10,
-                margin: '16px 0 20px',
-                padding: '12px 14px',
-                background: 'var(--bg-card, #161618)',
+                background: 'var(--bg-primary, #0c0c0d)',
                 border: '1px solid var(--border-color, #27272a)',
                 borderRadius: 8,
+                padding: '14px 16px',
+                marginBottom: 20,
               }}
             >
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  First Seen
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                  {person?.firstSeen ? new Date(person.firstSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                </div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Full Conversion & Browsing Journey
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Sessions
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                {/* 1. Acquisition */}
+                <div style={{ padding: '10px 12px', background: 'var(--bg-card, #161618)', borderRadius: 6, border: '1px solid var(--border-color, #27272a)' }}>
+                  <div style={{ fontSize: 11, color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🚀 1. Acquisition
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: '#fff', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <ChannelIcon channel={person?.acquisitionSource} size={14} />
+                    <span>{person?.acquisitionSource || 'Direct'}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={sessions[sessions.length - 1]?.entry_page || '/'}>
+                    {sessions[sessions.length - 1]?.entry_page ? `Landed: ${sessions[sessions.length - 1].entry_page}` : 'Direct Landing'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                  {person?.totalSessions || 0}
+
+                {/* 2. Pre-Login Website */}
+                <div style={{ padding: '10px 12px', background: 'var(--bg-card, #161618)', borderRadius: 6, border: '1px solid var(--border-color, #27272a)' }}>
+                  <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🌐 2. Pre-Login
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: '#fff' }}>
+                    {preLoginPagesCount} {preLoginPagesCount === 1 ? 'Page' : 'Pages'} Visited
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Before signup
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Pageviews
+
+                {/* 3. Login Event */}
+                <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.3)' }}>
+                  <div style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🔑 3. Logged In
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={person?.email}>
+                    {person?.email || 'Identified'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#a5b4fc', marginTop: 2 }}>
+                    {person?.identifiedAt ? new Date(person.identifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Authenticated'}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                  {person?.totalPageViews || 0}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Acquisition
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    marginTop: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={person?.acquisitionSource}
-                >
-                  <ChannelIcon channel={person?.acquisitionSource} size={14} />
-                  <span>{person?.acquisitionSource || 'Direct'}</span>
+
+                {/* 4. Post-Login App Usage */}
+                <div style={{ padding: '10px 12px', background: 'var(--bg-card, #161618)', borderRadius: 6, border: '1px solid var(--border-color, #27272a)' }}>
+                  <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ⚡ 4. App Usage
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: '#fff' }}>
+                    {postLoginPagesCount} {postLoginPagesCount === 1 ? 'Page' : 'Pages'} Used
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {person?.totalConversions > 0 ? `💰 ${person.totalConversions} Conversions` : 'App active'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -440,6 +465,21 @@ export default function PersonFootprintDrawer({ siteId, email, onClose }) {
                                     }}
                                   >
                                     {isMainWebsite ? `🌐 ${host} (Website)` : isApp ? `⚡ ${host} (App)` : host}
+                                  </span>
+                                )}
+                                {identifiedTime > 0 && item.type === 'pageview' && (
+                                  <span
+                                    style={{
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      background: new Date(item.timestamp).getTime() <= identifiedTime ? 'rgba(52,211,153,0.1)' : 'rgba(245,158,11,0.1)',
+                                      color: new Date(item.timestamp).getTime() <= identifiedTime ? '#34d399' : '#f59e0b',
+                                      border: new Date(item.timestamp).getTime() <= identifiedTime ? '1px solid rgba(52,211,153,0.25)' : '1px solid rgba(245,158,11,0.25)',
+                                    }}
+                                  >
+                                    {new Date(item.timestamp).getTime() <= identifiedTime ? 'Before Login' : 'After Login'}
                                   </span>
                                 )}
                                 {item.data?.referrer && item.data.referrer !== '' && (

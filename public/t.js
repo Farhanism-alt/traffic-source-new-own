@@ -14,35 +14,61 @@
   var REF_KEY = '_ts_ref';
   var TIMEOUT = 30 * 60 * 1000;
 
+  function getCookieDomain() {
+    if (script && script.getAttribute('data-cookie-domain')) {
+      return script.getAttribute('data-cookie-domain');
+    }
+    var host = location.hostname;
+    if (!host || host === 'localhost' || host === '127.0.0.1' || /^(\d+\.){3}\d+$/.test(host)) {
+      return '';
+    }
+    var parts = host.split('.');
+    if (parts.length >= 2) {
+      return '.' + parts.slice(-2).join('.');
+    }
+    return '';
+  }
+
+  function getCookie(name) {
+    var v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+  }
+
+  function setCookie(name, value, maxAge) {
+    var domain = getCookieDomain();
+    var domainAttr = domain ? ';domain=' + domain : '';
+    document.cookie = name + '=' + value + ';path=/' + domainAttr + ';max-age=' + maxAge + ';SameSite=Lax';
+  }
+
   // Detect and persist affiliate ref parameter
   var refParam = new URLSearchParams(location.search).get('ref');
   if (refParam) {
     localStorage.setItem(REF_KEY, refParam);
   }
 
-  var vid = localStorage.getItem(VID_KEY);
+  var vid = localStorage.getItem(VID_KEY) || getCookie(VID_KEY);
   if (!vid) {
     vid = uid();
-    localStorage.setItem(VID_KEY, vid);
   }
-  document.cookie = VID_KEY + '=' + vid + ';path=/;max-age=31536000;SameSite=Lax';
+  localStorage.setItem(VID_KEY, vid);
+  setCookie(VID_KEY, vid, 31536000);
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
   }
 
   function getSession() {
-    var stored = sessionStorage.getItem(SID_KEY);
+    var stored = sessionStorage.getItem(SID_KEY) || getCookie(SID_KEY);
     var ts = parseInt(sessionStorage.getItem(STS_KEY) || '0', 10);
     var sid;
     if (stored && Date.now() - ts < TIMEOUT) {
       sid = stored;
     } else {
       sid = uid();
-      sessionStorage.setItem(SID_KEY, sid);
     }
+    sessionStorage.setItem(SID_KEY, sid);
     sessionStorage.setItem(STS_KEY, String(Date.now()));
-    document.cookie = SID_KEY + '=' + sid + ';path=/;max-age=1800;SameSite=Lax';
+    setCookie(SID_KEY, sid, 1800);
     return sid;
   }
 

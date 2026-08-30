@@ -45,6 +45,15 @@ const DOMAIN_TO_SOURCE = {
   'yahoo.com': 'Yahoo',
   'yandex.com': 'Yandex',
   'baidu.com': 'Baidu',
+  // AI Engines & Chatbots
+  'chatgpt.com': 'ChatGPT',
+  'chat.openai.com': 'ChatGPT',
+  'claude.ai': 'Claude',
+  'perplexity.ai': 'Perplexity',
+  'gemini.google.com': 'Google Gemini',
+  'copilot.microsoft.com': 'Copilot',
+  'grok.com': 'Grok',
+  'x.ai': 'Grok',
 };
 
 export function normalizeSource(name) {

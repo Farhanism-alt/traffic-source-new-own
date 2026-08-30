@@ -6,7 +6,11 @@ const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 const COOKIE_NAME = 'ts_auth';
 
 function getSecret() {
-  return process.env.JWT_SECRET || 'fallback-secret-please-set-JWT_SECRET';
+  const s = process.env.JWT_SECRET;
+  if (!s || s === '[SENSITIVE]') {
+    return 'traffic-source-default-jwt-secret-key-32b';
+  }
+  return s;
 }
 
 export async function hashPassword(password) {

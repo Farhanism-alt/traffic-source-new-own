@@ -28,6 +28,13 @@ const DOMAIN_MAP = {
   'hacker news': 'news.ycombinator.com',
   producthunt: 'producthunt.com',
   'product hunt': 'producthunt.com',
+  chatgpt: 'chatgpt.com',
+  claude: 'claude.ai',
+  perplexity: 'perplexity.ai',
+  gemini: 'gemini.google.com',
+  'google gemini': 'gemini.google.com',
+  copilot: 'copilot.microsoft.com',
+  grok: 'grok.com',
 };
 
 function resolveDomain(name = '') {

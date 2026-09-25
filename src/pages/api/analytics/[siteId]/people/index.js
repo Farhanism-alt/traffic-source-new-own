@@ -1,6 +1,7 @@
-import { getRows, getRow, run } from '@/lib/db';
+import { getRow, run } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { verifySiteOwnership, getLinkedSiteIds } from '@/lib/analytics';
+import { queryPeople } from '@/lib/people';
 
 let tableReady = null;
 function ensureIdentitiesTable() {
@@ -58,68 +59,7 @@ export default withAuth(async function handler(req, res) {
   const total = Number(countRow?.total || 0);
 
   // Fetch people list with first/last session stats and conversion totals
-  const people = await getRows(
-    `SELECT
-      vi.id,
-      vi.email,
-      vi.visitor_id,
-      vi.created_at as identified_at,
-      COALESCE(s_first.utm_source, s_first.referrer_domain, 'Direct') as acquisition_source,
-      s_first.utm_medium,
-      s_first.utm_campaign,
-      s_first.referrer,
-      s_first.entry_page,
-      s_first.country,
-      s_first.city,
-      s_first.browser,
-      s_first.os,
-      s_first.device_type,
-      s_first.started_at as first_seen,
-      s_last.last_activity as last_seen,
-      COALESCE(s_agg.session_count, 0) as total_sessions,
-      COALESCE(s_agg.total_page_views, 0) as total_page_views,
-      COALESCE(c_agg.total_conversions, 0) as total_conversions,
-      COALESCE(c_agg.total_spent, 0) as total_spent,
-      c_agg.currency as spent_currency
-    FROM visitor_identities vi
-    LEFT JOIN LATERAL (
-      SELECT started_at, utm_source, utm_medium, utm_campaign, referrer, referrer_domain, entry_page, country, city, browser, os, device_type
-      FROM sessions
-      WHERE site_id::text = ANY(?) AND visitor_id = vi.visitor_id
-      ORDER BY started_at ASC
-      LIMIT 1
-    ) s_first ON true
-    LEFT JOIN LATERAL (
-      SELECT COALESCE(last_activity, started_at) as last_activity
-      FROM sessions
-      WHERE site_id::text = ANY(?) AND visitor_id = vi.visitor_id
-      ORDER BY COALESCE(last_activity, started_at) DESC
-      LIMIT 1
-    ) s_last ON true
-    LEFT JOIN LATERAL (
-      SELECT COUNT(DISTINCT id) as session_count, COALESCE(SUM(page_count), 0) as total_page_views
-      FROM sessions
-      WHERE site_id::text = ANY(?) AND visitor_id = vi.visitor_id
-    ) s_agg ON true
-    LEFT JOIN LATERAL (
-      SELECT COUNT(*) as total_conversions, COALESCE(SUM(amount), 0) as total_spent, MAX(currency) as currency
-      FROM conversions
-      WHERE site_id::text = ANY(?) AND (visitor_id = vi.visitor_id OR stripe_customer_email = vi.email) AND status = 'completed'
-    ) c_agg ON true
-    WHERE vi.site_id = ANY(?) ${searchClause}
-    ORDER BY vi.created_at DESC
-    LIMIT ? OFFSET ?`,
-    [
-      linkedIdStrings,
-      linkedIdStrings,
-      linkedIdStrings,
-      linkedIdStrings,
-      linkedIdStrings,
-      ...searchParams,
-      pageSize,
-      offset,
-    ]
-  );
+  const people = await queryPeople(linkedIdStrings, { searchClause, searchParams, limit: pageSize, offset });
 
   res.setHeader('Cache-Control', 'private, max-age=15');
   res.status(200).json({

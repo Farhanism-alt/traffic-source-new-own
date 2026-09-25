@@ -8,6 +8,9 @@
   var SITE_ID = script.getAttribute('data-site');
   if (!SITE_ID) return;
 
+  // Skip automated browsers and crawlers — they only cost requests
+  if (navigator.webdriver || /bot|crawl|spider|slurp|headless|lighthouse|pagespeed|prerender|phantom/i.test(navigator.userAgent || '')) return;
+
   var VID_KEY = '_ts_vid';
   var SID_KEY = '_ts_sid';
   var STS_KEY = '_ts_sts';
@@ -82,7 +85,7 @@
     return u;
   }
 
-  function send(data) {
+  function build(data) {
     data.site_id = SITE_ID;
     data.visitor_id = vid;
     data.session_id = getSession();
@@ -96,28 +99,61 @@
 
     var ref = localStorage.getItem(REF_KEY);
     if (ref) data.ref = ref;
+    return data;
+  }
 
-    var payload = JSON.stringify(data);
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(ENDPOINT, payload);
-    } else {
+  function post(items) {
+    if (!items.length) return;
+    var payload = JSON.stringify(items.length === 1 ? items[0] : { batch: items });
+    if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, payload)) return;
+    try {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', ENDPOINT, true);
       xhr.setRequestHeader('Content-Type', 'text/plain');
       xhr.send(payload);
-    }
+    } catch (_) {}
+  }
+
+  // Low-priority hits (events, identify) are queued and sent together:
+  // with the next pageview, after a short delay, or when the page is hidden.
+  var queue = [];
+  var flushTimer = null;
+  var MAX_BATCH = 20;
+
+  function flush() {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    while (queue.length) post(queue.splice(0, MAX_BATCH));
+  }
+
+  function enqueue(data) {
+    queue.push(build(data));
+    if (queue.length >= MAX_BATCH) return flush();
+    if (!flushTimer) flushTimer = setTimeout(flush, 5000);
+  }
+
+  // Pageviews go out immediately, carrying anything queued with them
+  function send(data) {
+    queue.unshift(build(data));
+    flush();
   }
 
   // Custom event tracking — window.__ts.track('Button Click', { label: 'signup' })
   function track(name, props) {
     if (!name) return;
-    send({ type: 'event', name: String(name), props: props || {} });
+    enqueue({ type: 'event', name: String(name), props: props || {} });
   }
 
   // Manual identify — window.__ts.identify('user@example.com')
+  var IDN_KEY = '_ts_idn';
   function identify(email) {
     if (!email || String(email).indexOf('@') < 1) return;
-    send({ type: 'identify', email: String(email).trim().toLowerCase() });
+    email = String(email).trim().toLowerCase();
+    // Each email is sent once per session (blur + change + submit all fire for the same field)
+    var sent = '';
+    try { sent = sessionStorage.getItem(IDN_KEY) || ''; } catch (_) {}
+    if (sent === email) return;
+    try { sessionStorage.setItem(IDN_KEY, email); } catch (_) {}
+    enqueue({ type: 'identify', email: email });
   }
 
   // Capture email as soon as the user leaves an email field — fires before any form submit
@@ -130,7 +166,7 @@
     if (t !== 'email' && n.indexOf('email') < 0 && id.indexOf('email') < 0) return;
     var email = (el.value || '').trim().toLowerCase();
     if (email && email.indexOf('@') > 1 && email.indexOf('.') > 2) {
-      send({ type: 'identify', email: email });
+      identify(email);
     }
   }
   document.addEventListener('blur', function (e) { maybeSendEmail(e.target); }, true);
@@ -147,7 +183,8 @@
     if (!emailEl) return;
     var email = (emailEl.value || '').trim().toLowerCase();
     if (email && email.indexOf('@') > 0) {
-      send({ type: 'identify', email: email });
+      identify(email);
+      flush();
     }
   }, true);
 
@@ -172,8 +209,29 @@
   // Track initial page view
   send({ type: 'pageview' });
 
-  // Heartbeat every 2 minutes so live-visitor count stays accurate
-  setInterval(function () { send({ type: 'heartbeat' }); }, 2 * 60 * 1000);
+  // Heartbeat keeps the live-visitor count accurate (realtime window is 5 min).
+  // Only sent while the tab is visible and the user was active in the last 30 min.
+  var HEARTBEAT_MS = 4 * 60 * 1000;
+  var IDLE_MS = 30 * 60 * 1000;
+  var lastInput = Date.now();
+  var lastSent = Date.now();
+  ['mousemove', 'keydown', 'scroll', 'touchstart'].forEach(function (ev) {
+    window.addEventListener(ev, function () { lastInput = Date.now(); }, { passive: true, capture: true });
+  });
+  function beat() {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - lastInput > IDLE_MS) return;
+    lastSent = Date.now();
+    post([build({ type: 'heartbeat' })]);
+  }
+  setInterval(beat, HEARTBEAT_MS);
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flush();
+    // Returning after a long absence: refresh presence right away
+    else if (Date.now() - lastSent > HEARTBEAT_MS) { lastInput = Date.now(); beat(); }
+  });
+  window.addEventListener('pagehide', flush);
 
   // SPA support — only fire when URL actually changes
   var lastUrl = location.href;

@@ -73,6 +73,9 @@ export default function RealtimeUsers({ countries = [] }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [mapFullscreen]);
 
+  // Poll often only while the map is open; the collapsed badge refreshes slowly
+  const pollMs = expanded ? 60000 : 180000;
+
   useEffect(() => {
     if (!siteId) return;
     const fetchRealtime = async () => {
@@ -89,7 +92,7 @@ export default function RealtimeUsers({ countries = [] }) {
     const startPolling = () => {
       if (intervalRef.current) return;
       fetchRealtime();
-      intervalRef.current = setInterval(fetchRealtime, 60000);
+      intervalRef.current = setInterval(fetchRealtime, pollMs);
     };
     const stopPolling = () => {
       clearInterval(intervalRef.current);
@@ -106,7 +109,7 @@ export default function RealtimeUsers({ countries = [] }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       stopPolling();
     };
-  }, [siteId]);
+  }, [siteId, pollMs]);
 
   if (!data) return null;
 

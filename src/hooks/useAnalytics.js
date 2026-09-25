@@ -23,14 +23,15 @@ export function useAnalytics(endpoint, extraParams = {}) {
 
   const filterKey = JSON.stringify(filterParams);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (fresh = false) => {
     if (!siteId) return;
     // Only show full loading spinner on first load; keep stale data visible on refetch
     setData(prev => { if (!prev) setLoading(true); return prev; });
     setError(null);
     try {
       const params = new URLSearchParams({ ...getParams(), ...filterParams, ...extraParams });
-      const res = await fetch(`/api/analytics/${siteId}/${endpoint}?${params}`);
+      // Read endpoints are browser-cached briefly; refetch() after a change bypasses that
+      const res = await fetch(`/api/analytics/${siteId}/${endpoint}?${params}`, fresh ? { cache: 'reload' } : undefined);
       if (!res.ok) throw new Error('Failed to fetch');
       setData(await res.json());
     } catch (err) {
@@ -44,5 +45,7 @@ export function useAnalytics(endpoint, extraParams = {}) {
     fetchData();
   }, [fetchData]);
 
-  return { data, loading, error, refetch: fetchData };
+  const refetch = useCallback(() => fetchData(true), [fetchData]);
+
+  return { data, loading, error, refetch };
 }

@@ -308,7 +308,7 @@ function OverviewDashboard({ onClose }) {
         const startPolling = () => {
             if (intervalRef.current) return;
             fetchData();
-            intervalRef.current = setInterval(fetchData, 30000);
+            intervalRef.current = setInterval(fetchData, 120000);
         };
         const stopPolling = () => {
             clearInterval(intervalRef.current);

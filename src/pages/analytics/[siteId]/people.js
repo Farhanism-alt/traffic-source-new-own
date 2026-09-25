@@ -34,6 +34,33 @@ export default function People() {
   const [availableSites, setAvailableSites] = useState([]);
   const [selectedTargetSite, setSelectedTargetSite] = useState('');
   const [connectingSite, setConnectingSite] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState('all');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  const handleMasterExport = async () => {
+    if (!siteId || exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const res = await fetch(`/api/analytics/${siteId}/export?period=${exportPeriod}`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = match ? match[1] : 'master-export.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setExportError('Export failed. Try a shorter date range.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const fetchConnections = useCallback(async () => {
     if (!siteId) return;
@@ -194,7 +221,34 @@ CREATE TRIGGER on_auth_user_created_traffic_source
               Identified visitors, acquisition sources, and multi-domain journey traces across your website and app.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <select
+              value={exportPeriod}
+              onChange={(e) => setExportPeriod(e.target.value)}
+              disabled={exporting}
+              aria-label="Export date range"
+              style={{ fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'var(--font)' }}
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+              <option value="12m">Last 12 months</option>
+              <option value="all">All time</option>
+            </select>
+            <button
+              className="btn btn-primary"
+              onClick={handleMasterExport}
+              disabled={exporting}
+              title="Download one Excel file with summary, sources, people, payments, sessions, events and page views"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {exporting ? 'Exporting…' : 'Master Export'}
+            </button>
             <button
               className="btn btn-secondary"
               onClick={() => setShowSetupModal(true)}
@@ -209,6 +263,10 @@ CREATE TRIGGER on_auth_user_created_traffic_source
             </button>
           </div>
         </div>
+
+        {exportError && (
+          <div style={{ marginBottom: 12, color: 'var(--danger, #ef4444)', fontSize: 13 }}>{exportError}</div>
+        )}
 
         {/* Search Bar */}
         <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>

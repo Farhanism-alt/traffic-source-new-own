@@ -23,7 +23,8 @@ const nextConfig = {
         source: '/t.js',
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' },
+          // Browsers re-check hourly, the CDN daily (purged on every deploy)
+          { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800' },
         ],
       },
     ];

@@ -7,6 +7,7 @@ import CountryFlag from '@/components/ui/CountryFlag';
 import ChannelIcon from '@/components/ui/ChannelIcon';
 import PersonFootprintDrawer from '@/components/ui/PersonFootprintDrawer';
 import { getCountryName } from '@/lib/formatters';
+import { downloadMasterExport } from '@/lib/masterExport';
 
 function formatRelativeTime(isoStr) {
   if (!isoStr) return '—';
@@ -43,18 +44,7 @@ export default function People() {
     setExporting(true);
     setExportError('');
     try {
-      const res = await fetch(`/api/analytics/${siteId}/export?period=${exportPeriod}`);
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = match ? match[1] : 'master-export.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadMasterExport(siteId, { period: exportPeriod });
     } catch {
       setExportError('Export failed. Try a shorter date range.');
     } finally {

@@ -12,6 +12,7 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 import { useFilters } from '@/contexts/FilterContext';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { getCountryName, buildPageHref } from '@/lib/formatters';
+import { downloadMasterExport } from '@/lib/masterExport';
 import CountryFlag from '@/components/ui/CountryFlag';
 import TechIcon from '@/components/ui/TechIcon';
 import ChannelIcon from '@/components/ui/ChannelIcon';
@@ -42,6 +43,25 @@ export default function Analytics() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const [masterExporting, setMasterExporting] = useState(false);
+  const [masterExportMsg, setMasterExportMsg] = useState('');
+  const showMasterExport = activePeriod === 'all' && !customRange;
+
+  // Everything ever captured for this site (and its connected sites), no filters or caps.
+  const masterExport = useCallback(async () => {
+    if (!siteId || masterExporting) return;
+    setMasterExporting(true);
+    setMasterExportMsg('Preparing…');
+    try {
+      const parts = await downloadMasterExport(siteId, { period: 'all' }, (part) => setMasterExportMsg(`Downloading part ${part}…`));
+      setMasterExportMsg(parts > 1 ? `Downloaded ${parts} files` : '');
+    } catch {
+      setMasterExportMsg('Master export failed');
+    } finally {
+      setMasterExporting(false);
+      setTimeout(() => setMasterExportMsg(''), 6000);
+    }
+  }, [siteId, masterExporting]);
   const { data, loading, error, refetch } = useAnalytics('overview', compare ? { compare: '1' } : {});
   const { data: botData } = useAnalytics('bot-traffic');
   const botCrawlers = (botData?.crawlers || []).map(c => ({ name: c.crawler_name || c.crawler_token, count: Number(c.count) }));
@@ -176,6 +196,21 @@ export default function Analytics() {
       >
         ✨ AI Insights
       </button>
+      {showMasterExport && (
+        <button
+          onClick={masterExport}
+          disabled={masterExporting || !siteId}
+          title="Download every page, visitor, session, event and payment ever captured (.xlsx)"
+          style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, color: '#4ade80', cursor: masterExporting ? 'not-allowed' : 'pointer', opacity: masterExporting ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>
+          </svg>
+          {masterExporting ? (masterExportMsg || 'Exporting…') : (masterExportMsg || 'Master Export')}
+        </button>
+      )}
       <button
         onClick={exportCSV}
         title="Export analytics data as CSV"

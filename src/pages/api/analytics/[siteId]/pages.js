@@ -26,6 +26,9 @@ const SORTS = {
   first_seen: 'first_seen',
   page: 'page',
   source_visitors: 'source_visitors',
+  revenue: 'revenue',
+  buyers: 'buyers',
+  conv_rate: 'conv_rate',
 };
 
 // Unknown (no next view, no heartbeat) stays NULL so it's left out of the average.
@@ -33,9 +36,9 @@ const CLAMPED_SECS = `CASE WHEN raw_secs IS NULL THEN NULL WHEN raw_secs < 0 THE
 
 const SOURCE_EXPR = `COALESCE(NULLIF(s.utm_source, ''), NULLIF(s.referrer_domain, ''), 'Direct')`;
 
-async function botTableExists() {
+async function tableExists(name) {
   try {
-    await getRows('SELECT 1 FROM bot_visits LIMIT 1');
+    await getRows(`SELECT 1 FROM ${name} LIMIT 1`);
     return true;
   } catch {
     return false;
@@ -69,7 +72,11 @@ export default withAuth(async function handler(req, res) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
 
-  const hasBots = await botTableExists();
+  const [hasBots, hasConversions, hasIdentities] = await Promise.all([
+    tableExists('bot_visits'),
+    tableExists('conversions'),
+    tableExists('visitor_identities'),
+  ]);
 
   const params = [];
   const add = (...v) => { params.push(...v); return '?'; };
@@ -125,6 +132,62 @@ export default withAuth(async function handler(req, res) {
       GROUP BY pathname
     )`;
 
+  // Revenue a page brought in: completed payments in the range whose buyer viewed the
+  // page (in the range) at or before paying. A buyer is matched by the payment's visitor
+  // id, or by its email through identified visitors. One payment counts once per page,
+  // and counts for every page the buyer saw on the way, so page totals overlap.
+  // Built in SQL order so the ? placeholders line up with params.
+  const paymentsCte = () => `payments AS (
+        SELECT c.id AS conv_id, COALESCE(c.amount, 0) AS amount, c.created_at,
+               UPPER(COALESCE(NULLIF(c.currency, ''), 'USD')) AS currency,
+               COALESCE(LOWER(c.stripe_customer_email), c.visitor_id, c.id::text) AS buyer
+        FROM conversions c
+        WHERE c.site_id::text = ANY(${add(ids)}) AND c.status = 'completed'
+          AND c.created_at BETWEEN ${add(from)} AND ${add(to)}
+      )`;
+  const identityMatch = () => (hasIdentities
+    ? `UNION
+           SELECT vi.visitor_id FROM visitor_identities vi
+           WHERE vi.site_id = ANY(${add(ids)}) AND c.stripe_customer_email IS NOT NULL
+             AND LOWER(vi.email) = LOWER(c.stripe_customer_email)`
+    : '');
+  const revenueCtes = hasConversions
+    ? `${paymentsCte()},
+      payment_visitors AS (
+        SELECT p.conv_id, p.created_at, v.visitor_id
+        FROM payments p
+        JOIN conversions c ON c.id = p.conv_id
+        CROSS JOIN LATERAL (
+          SELECT c.visitor_id AS visitor_id
+          ${identityMatch()}
+        ) v
+        WHERE v.visitor_id IS NOT NULL
+      ),
+      touched AS (
+        SELECT DISTINCT vw.pathname, pv.conv_id
+        FROM views vw
+        JOIN payment_visitors pv ON pv.visitor_id = vw.visitor_id AND vw.timestamp <= pv.created_at
+      ),
+      rev_cur AS (
+        SELECT t.pathname, p.currency, SUM(p.amount) AS amount
+        FROM touched t JOIN payments p ON p.conv_id = t.conv_id
+        GROUP BY 1, 2
+      ),
+      rev AS (
+        SELECT t.pathname,
+               SUM(p.amount) AS revenue,
+               COUNT(*) AS payments,
+               COUNT(DISTINCT p.buyer) AS buyers,
+               (SELECT jsonb_object_agg(rc.currency, rc.amount) FROM rev_cur rc WHERE rc.pathname = t.pathname) AS revenue_by_currency
+        FROM touched t JOIN payments p ON p.conv_id = t.conv_id
+        GROUP BY t.pathname
+      )`
+    : `rev AS (
+        SELECT NULL::text AS pathname, 0::numeric AS revenue, 0::bigint AS payments,
+               0::bigint AS buyers, NULL::jsonb AS revenue_by_currency
+        WHERE false
+      )`;
+
   const where = [];
   if (search) where.push(`page ILIKE ${add(`%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)}`);
   if (traffic === 'humans') where.push('visitors > 0');
@@ -134,7 +197,7 @@ export default withAuth(async function handler(req, res) {
   const paging = csv ? '' : `LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
 
   const rows = await getRows(
-    `WITH ${botCte}, ${viewsCte}, ${humansCte},
+    `WITH ${botCte}, ${viewsCte}, ${humansCte}, ${revenueCtes},
      merged AS (
        SELECT COALESCE(h.pathname, b.pathname) AS page,
               COALESCE(h.visitors, 0) AS visitors,
@@ -146,10 +209,16 @@ export default withAuth(async function handler(req, res) {
               COALESCE(h.source_visitors, 0) AS source_visitors,
               COALESCE(b.bot_hits, 0) AS bot_hits,
               COALESCE(b.ai_bot_hits, 0) AS ai_bot_hits,
+              COALESCE(r.revenue, 0) AS revenue,
+              COALESCE(r.payments, 0) AS payments,
+              COALESCE(r.buyers, 0) AS buyers,
+              CASE WHEN COALESCE(h.visitors, 0) > 0 THEN COALESCE(r.buyers, 0)::numeric / h.visitors ELSE 0 END AS conv_rate,
+              r.revenue_by_currency,
               LEAST(h.first_seen, b.first_seen) AS first_seen,
               GREATEST(h.last_seen, b.last_seen) AS last_seen
        FROM humans h
        FULL OUTER JOIN bots b ON b.pathname = h.pathname
+       LEFT JOIN rev r ON r.pathname = h.pathname
      )
      SELECT *, COUNT(*) OVER () AS total_count
      FROM merged
@@ -197,6 +266,13 @@ export default withAuth(async function handler(req, res) {
       avgTimeSec: r.avg_time_sec == null ? null : Number(r.avg_time_sec),
       botHits: Number(r.bot_hits),
       aiBotHits: Number(r.ai_bot_hits),
+      // Amounts are in cents, keyed by currency, largest first
+      revenue: Object.entries(r.revenue_by_currency || {})
+        .map(([currency, amount]) => ({ currency, amount: Number(amount) }))
+        .sort((a, b) => b.amount - a.amount),
+      payments: Number(r.payments),
+      buyers: Number(r.buyers),
+      conversionRatePct: Math.round(Number(r.conv_rate) * 1000) / 10,
       sourceVisitors: source ? Number(r.source_visitors) : null,
       firstSeen: r.first_seen,
       lastSeen: r.last_seen,
@@ -206,10 +282,12 @@ export default withAuth(async function handler(req, res) {
   });
 
   if (csv) {
+    const currencies = [...new Set(pages.flatMap((p) => p.revenue.map((x) => x.currency)))].sort();
     const header = [
       'Page', 'Visitors', 'Page views', 'Sessions', 'Entrances', 'Total time spent (sec)', 'Avg time per view (sec)',
       'Top source', 'Top source type', 'Top source visitors', 'Top source share %', 'All sources (visitors)',
       ...(source ? [`${source} visitors`] : []),
+      ...currencies.map((c) => `Revenue ${c}`), 'Payments', 'Paying customers', 'Visitor to customer %',
       'Bot hits', 'AI bot hits', 'First seen (UTC)', 'Last seen (UTC)',
     ];
     const lines = [header.map(csvCell).join(',')];
@@ -219,6 +297,11 @@ export default withAuth(async function handler(req, res) {
         p.topSource?.name, p.topSource?.type, p.topSource?.visitors, p.topSource?.sharePct,
         [...(sourcesByPage.get(p.page)?.values() || [])].sort((a, b) => b.visitors - a.visitors).map((s) => `${s.name} (${s.visitors})`).join('; '),
         ...(source ? [p.sourceVisitors] : []),
+        ...currencies.map((c) => {
+          const hit = p.revenue.find((x) => x.currency === c);
+          return hit ? (hit.amount / 100).toFixed(2) : '0.00';
+        }),
+        p.payments, p.buyers, p.conversionRatePct,
         p.botHits, p.aiBotHits,
         p.firstSeen ? new Date(p.firstSeen).toISOString() : '', p.lastSeen ? new Date(p.lastSeen).toISOString() : '',
       ].map(csvCell).join(','));

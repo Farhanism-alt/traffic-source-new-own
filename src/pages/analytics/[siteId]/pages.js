@@ -11,6 +11,9 @@ const PAGE_SIZE = 20;
 const SORT_OPTIONS = [
   { value: 'visitors:desc', label: 'Most visitors' },
   { value: 'visitors:asc', label: 'Least visitors' },
+  { value: 'revenue:desc', label: 'Most revenue' },
+  { value: 'buyers:desc', label: 'Most paying customers' },
+  { value: 'conv_rate:desc', label: 'Best visitor → customer %' },
   { value: 'views:desc', label: 'Most viewed' },
   { value: 'views:asc', label: 'Least viewed' },
   { value: 'time:desc', label: 'Most time spent' },
@@ -54,6 +57,14 @@ function formatRelative(iso) {
 }
 
 const fmt = (n) => Number(n || 0).toLocaleString();
+
+function formatMoney(cents, currency) {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
+}
 
 const th = (align = 'left') => ({
   padding: '10px 14px',
@@ -270,6 +281,7 @@ export default function Pages() {
                     <th style={th('right')}>Views</th>
                     <th style={th('right')}>Time spent</th>
                     <th style={th('right')}>Avg / view</th>
+                    <th style={th('right')} title="Payments made by visitors who viewed this page before paying. One payment counts for every page the buyer saw, so page totals overlap.">Revenue</th>
                     <th style={th()}>Top source</th>
                     {source && <th style={th('right')}>From {source}</th>}
                     <th style={th('right')}>Bot hits</th>
@@ -306,6 +318,21 @@ export default function Pages() {
                         <td style={td('right')}>{fmt(p.views)}</td>
                         <td style={td('right')}>{p.views ? formatDuration(p.totalTimeSec) : '—'}</td>
                         <td style={{ ...td('right'), color: 'var(--text-muted)' }}>{p.views ? formatDuration(p.avgTimeSec) : '—'}</td>
+                        <td style={{ ...td('right'), whiteSpace: 'nowrap' }}>
+                          {p.revenue.length ? (
+                            <div title={p.revenue.map((r) => formatMoney(r.amount, r.currency)).join('\n')}>
+                              <div style={{ fontWeight: 600, color: '#4ade80' }}>
+                                {formatMoney(p.revenue[0].amount, p.revenue[0].currency)}
+                                {p.revenue.length > 1 && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}> +{p.revenue.length - 1}</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {fmt(p.buyers)} customer{p.buyers === 1 ? '' : 's'} · {p.conversionRatePct}%
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
                         <td style={td()}>
                           {p.topSource ? (
                             <div

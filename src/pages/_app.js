@@ -1,4 +1,5 @@
 import '@/styles/globals.scss';
+import 'rrweb-player/dist/style.css';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { DateRangeProvider } from '@/contexts/DateRangeContext';

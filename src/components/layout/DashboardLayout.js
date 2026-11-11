@@ -61,6 +61,13 @@ export default function DashboardLayout({ children, siteId, siteName, siteDomain
                     Pages
                   </Link>
                   <Link
+                    href={`/analytics/${siteId}/replays`}
+                    className={`app-nav-link ${path.includes('/replays') ? 'active' : ''}`}
+                    prefetch={false}
+                  >
+                    Replays
+                  </Link>
+                  <Link
                     href={`/analytics/${siteId}/conversions`}
                     className={`app-nav-link ${path.includes('/conversions') ? 'active' : ''}`}
                     prefetch={false}

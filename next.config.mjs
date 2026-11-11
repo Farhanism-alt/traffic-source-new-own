@@ -27,6 +27,13 @@ const nextConfig = {
           { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800' },
         ],
       },
+      {
+        source: '/r.js',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800' },
+        ],
+      },
     ];
   },
 };

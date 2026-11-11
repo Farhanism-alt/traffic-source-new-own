@@ -253,6 +253,51 @@
     if (location.href !== lastUrl) { lastUrl = location.href; send({ type: 'pageview' }); }
   });
 
+  // Session replay: the recorder (r.js) loads only when replay is on for this site
+  // and this session is sampled in. Opt out per page with data-replay="off" on the script tag.
+  function currentSid() {
+    try { return sessionStorage.getItem(SID_KEY) || getCookie(SID_KEY) || ''; } catch (_) { return getCookie(SID_KEY) || ''; }
+  }
+  function startReplay(cfg) {
+    if (!cfg || !cfg.enabled) return;
+    var sid = currentSid();
+    var pick = '';
+    try { pick = sessionStorage.getItem('_ts_rsamp') || ''; } catch (_) {}
+    if (pick.split(':')[0] !== sid) {
+      pick = sid + ':' + (Math.random() * 100 < (cfg.sample || 100) ? '1' : '0');
+      try { sessionStorage.setItem('_ts_rsamp', pick); } catch (_) {}
+    }
+    if (pick.split(':')[1] !== '1') return;
+    window.__ts_replay = {
+      endpoint: BASE + '/api/replay',
+      site: SITE_ID,
+      vid: vid,
+      sid: currentSid,
+      maskInputs: cfg.maskInputs !== false,
+      minSeconds: cfg.minSeconds || 0,
+    };
+    var s = document.createElement('script');
+    s.src = BASE + '/r.js';
+    s.async = true;
+    (document.head || document.documentElement).appendChild(s);
+  }
+  var BASE = script.src.replace(/\/t\.js(\?.*)?$/, '');
+  if (script.getAttribute('data-replay') !== 'off' && window.fetch && window.Promise) {
+    var RCFG = '_ts_rcfg';
+    var cachedCfg = null;
+    try { cachedCfg = JSON.parse(sessionStorage.getItem(RCFG) || 'null'); } catch (_) {}
+    if (cachedCfg) startReplay(cachedCfg);
+    else {
+      fetch(BASE + '/api/replay?config=1&s=' + encodeURIComponent(SITE_ID))
+        .then(function (r) { return r.ok ? r.json() : { enabled: false }; })
+        .then(function (c) {
+          try { sessionStorage.setItem(RCFG, JSON.stringify(c)); } catch (_) {}
+          startReplay(c);
+        })
+        .catch(function () {});
+    }
+  }
+
   var existingTs = window.__ts;
   window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track, identify: identify };
 

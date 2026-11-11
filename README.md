@@ -158,6 +158,23 @@ That's it. The script automatically tracks:
 - Screen dimensions
 - Affiliate referrals (`?ref=affiliate-slug`)
 
+## Session Replay
+
+Record what visitors see and do, like PostHog session replay, stored in your own storage.
+
+1. Open a site → **Replays** → **Replay settings** → turn on **Record sessions**. The tracking
+   script picks this up by itself (within ~5 minutes); no snippet change.
+2. Recordings are gzipped in the browser (rrweb) and uploaded in chunks. Inputs are masked by
+   default and passwords always are. Add `class="ts-no-record"` to hide an element entirely or
+   `class="ts-mask"` to mask its text. Opt a page out with `data-replay="off"` on the script tag.
+3. Storage: set the `REPLAY_S3_*` variables below to keep recordings in Supabase Storage (or any
+   S3-compatible bucket). Without them, recordings go to Postgres, capped at 100 MB.
+   In Supabase: Storage → New bucket `replays` (private) → Storage settings → S3 Connection →
+   copy endpoint and region, create an access key.
+4. Delete recordings in bulk (selected, or everything before a date), or set auto-delete after N days.
+
+The recorder bundle (`public/r.js`) is built from `scripts/replay-recorder/` with `npm run build:recorder`.
+
 ## Stripe Conversion Tracking
 
 1. Go to your site's Settings and add your Stripe Secret Key
@@ -219,6 +236,12 @@ When a visitor arrives via a referral link and later converts, the affiliate is 
 | `NEXT_PUBLIC_APP_URL` | Yes | — | Public URL of your Traffic Source instance |
 | `DATABASE_PATH` | No | `./data/analytics.db` | Path to SQLite database file |
 | `CRON_SECRET` | No | — | Secret for protecting cron endpoints |
+| `REPLAY_S3_ENDPOINT` | No | — | Session replay storage, e.g. `https://<ref>.supabase.co/storage/v1/s3` |
+| `REPLAY_S3_REGION` | No | `auto` | Storage region (Supabase shows it under S3 Connection) |
+| `REPLAY_S3_BUCKET` | No | — | Bucket for recordings, e.g. `replays` |
+| `REPLAY_S3_ACCESS_KEY_ID` | No | — | S3 access key id |
+| `REPLAY_S3_SECRET_ACCESS_KEY` | No | — | S3 secret access key |
+| `REPLAY_S3_PREFIX` | No | `replays` | Folder inside the bucket |
 
 ## Database
 

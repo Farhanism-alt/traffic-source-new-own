@@ -73,6 +73,7 @@ export default withAuth(async function handler(req, res) {
   }
   if (req.query.paid === 'paid') rows = rows.filter((r) => r.payments > 0);
   if (req.query.paid === 'unpaid') rows = rows.filter((r) => r.payments === 0);
+  if (req.query.paid === 'refunded') rows = rows.filter((r) => r.refunds > 0);
   const search = String(req.query.search || '').trim().toLowerCase();
   if (search) {
     rows = rows.filter((r) => [r.email, r.city, r.country, r.source, r.utmCampaign, r.referrer]
@@ -99,7 +100,7 @@ export default withAuth(async function handler(req, res) {
   if (req.query.format === 'csv') {
     const header = ['Email', 'First login (UTC)', 'Recent login (UTC)', 'Logins', 'Logins in range', 'Login method',
       'Came from', 'Source type', 'Referrer', 'UTM medium', 'UTM campaign', 'Landing page', 'First seen (UTC)',
-      'Last active (UTC)', 'City', 'Country', 'Device', 'Paid', 'Payments', 'Total spent', 'Currency', 'Last payment (UTC)'];
+      'Last active (UTC)', 'City', 'Country', 'Device', 'Paid', 'Payments', 'Total spent', 'Currency', 'Last payment (UTC)', 'Refunded payments', 'Refunded amount'];
     const lines = [header.map(csvCell).join(',')];
     for (const r of rows) {
       lines.push([
@@ -107,6 +108,7 @@ export default withAuth(async function handler(req, res) {
         r.source, r.sourceType, r.referrer, r.utmMedium, r.utmCampaign, r.entryPage, iso(r.firstSeen),
         iso(r.lastActive), r.city, r.country, r.device, r.payments > 0 ? 'Yes' : 'No', r.payments,
         r.spentCents ? (r.spentCents / 100).toFixed(2) : '0.00', r.currency, iso(r.lastPaid),
+        r.refunds, r.refundedCents ? `${(r.refundedCents / 100).toFixed(2)} ${r.refundCurrency || ''}`.trim() : '',
       ].map(csvCell).join(','));
     }
     const slug = String(site.domain || site.name || `site-${siteId}`).replace(/[^a-z0-9.-]+/gi, '-');

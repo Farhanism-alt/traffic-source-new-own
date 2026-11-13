@@ -16,7 +16,7 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
   // (its time is the latest identify) plus the per-session 'Identified' events logged since.
   const identifiedUnion = includeIdentified
     ? `UNION ALL
-       SELECT vi.visitor_id, NULL::text AS session_id, vi.created_at, '_identity' AS name, NULL::text AS provider, LOWER(vi.email) AS email
+       SELECT vi.visitor_id, NULL::text AS session_id, vi.created_at, '_identity' AS name, NULL::text AS provider, LOWER(TRIM(vi.email)) AS email
        FROM visitor_identities vi
        WHERE vi.site_id = ANY(?)
        UNION ALL
@@ -27,12 +27,12 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
 
   const params = [linkedIds, LOGIN_EVENT_SQL_RE];
   if (includeIdentified) params.push(linkedIds, linkedIds);
-  params.push(from, to, from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds);
+  params.push(from, to, from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds);
 
   const rows = await getRows(
     `WITH le AS (
        SELECT e.visitor_id, e.session_id, e.created_at, e.name, e.properties->>'provider' AS provider,
-              LOWER(COALESCE(NULLIF(e.properties->>'_email', ''), vi.email)) AS email
+              LOWER(TRIM(COALESCE(NULLIF(e.properties->>'_email', ''), vi.email))) AS email
        FROM events e
        LEFT JOIN LATERAL (
          SELECT email FROM visitor_identities v
@@ -62,7 +62,11 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
               ARRAY(
                 SELECT DISTINCT x FROM unnest(
                   COALESCE(p.login_vids, '{}') ||
-                  COALESCE((SELECT ARRAY_AGG(v.visitor_id) FROM visitor_identities v WHERE v.site_id = ANY(?) AND LOWER(v.email) = p.email), '{}')
+                  COALESCE((SELECT ARRAY_AGG(v.visitor_id) FROM visitor_identities v WHERE v.site_id = ANY(?) AND LOWER(TRIM(v.email)) = p.email), '{}') ||
+                  -- browsers that paid with this email belong to the person too
+                  COALESCE((SELECT ARRAY_AGG(c.visitor_id) FROM conversions c
+                            WHERE c.site_id::text = ANY(?) AND c.visitor_id IS NOT NULL
+                              AND LOWER(TRIM(c.stripe_customer_email)) = p.email), '{}')
                 ) x
               ) AS vids
        FROM p
@@ -70,7 +74,7 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
      SELECT pv.email, pv.first_login, pv.last_login, pv.logins, pv.logins_in_range, pv.active_in_range, pv.provider,
             fs.utm_source, fs.utm_medium, fs.utm_campaign, fs.referrer, fs.referrer_domain, fs.entry_page, fs.started_at AS first_seen,
             ls.country, ls.city, ls.device_type, ls.browser, ls.last_active,
-            pay.payments, pay.spent, pay.currency, pay.last_paid,
+            pay.payments, pay.spent, pay.currency, pay.last_paid, pay.refunds, pay.refunded, pay.refund_currency,
             pv.vids[1] AS visitor_id
      FROM pv
      LEFT JOIN LATERAL (
@@ -84,10 +88,16 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
        ORDER BY COALESCE(last_activity, started_at) DESC LIMIT 1
      ) ls ON true
      LEFT JOIN LATERAL (
-       SELECT COUNT(*) AS payments, SUM(amount) AS spent, MAX(UPPER(currency)) AS currency, MAX(created_at) AS last_paid
+       SELECT COUNT(*) FILTER (WHERE status = 'completed') AS payments,
+              SUM(amount) FILTER (WHERE status = 'completed') AS spent,
+              (ARRAY_AGG(UPPER(currency) ORDER BY created_at DESC) FILTER (WHERE status = 'completed'))[1] AS currency,
+              MAX(created_at) FILTER (WHERE status = 'completed') AS last_paid,
+              COUNT(*) FILTER (WHERE status = 'refunded') AS refunds,
+              SUM(amount) FILTER (WHERE status = 'refunded') AS refunded,
+              (ARRAY_AGG(UPPER(currency) ORDER BY created_at DESC) FILTER (WHERE status = 'refunded'))[1] AS refund_currency
        FROM conversions
-       WHERE site_id::text = ANY(?) AND status = 'completed'
-         AND (LOWER(stripe_customer_email) = pv.email OR visitor_id = ANY(pv.vids))
+       WHERE site_id::text = ANY(?)
+         AND (LOWER(TRIM(stripe_customer_email)) = pv.email OR visitor_id = ANY(pv.vids))
      ) pay ON true`,
     params
   );
@@ -120,6 +130,9 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
       spentCents: Number(r.spent) || 0,
       currency: r.currency || null,
       lastPaid: r.last_paid,
+      refunds: Number(r.refunds) || 0,
+      refundedCents: Number(r.refunded) || 0,
+      refundCurrency: r.refund_currency || null,
     };
   });
 }

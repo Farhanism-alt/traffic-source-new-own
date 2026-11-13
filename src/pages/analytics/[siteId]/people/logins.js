@@ -206,6 +206,7 @@ export default function Logins() {
             <option value="">Paid + free</option>
             <option value="paid">Paid only</option>
             <option value="unpaid">Not paid</option>
+            <option value="refunded">Refunded</option>
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort logins" style={controlStyle}>
             <option value="last_login:desc">Recent login</option>
@@ -304,6 +305,10 @@ export default function Logins() {
                           {r.payments > 0 ? (
                             <span title={`${r.payments} payment${r.payments === 1 ? '' : 's'} · last ${shortDate(r.lastPaid)}`} style={{ background: 'rgba(34,197,94,0.12)', color: '#4ade80', borderRadius: 4, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>
                               {formatMoney(r.spentCents, r.currency)}
+                            </span>
+                          ) : r.refunds > 0 ? (
+                            <span title={`${r.refunds} refunded payment${r.refunds === 1 ? '' : 's'}`} style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', borderRadius: 4, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>
+                              Refunded {formatMoney(r.refundedCents, r.refundCurrency)}
                             </span>
                           ) : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Free</span>}
                         </td>

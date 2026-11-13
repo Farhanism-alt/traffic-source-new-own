@@ -53,7 +53,7 @@ export default withAuth(async function handler(req, res) {
   const countRow = await getRow(
     `SELECT COUNT(DISTINCT vi.email) as total
      FROM visitor_identities vi
-     WHERE vi.site_id = ANY($1) ${searchClause}`,
+     WHERE vi.site_id = ANY(?) ${searchClause}`,
     [linkedIdStrings, ...searchParams]
   );
   const total = Number(countRow?.total || 0);

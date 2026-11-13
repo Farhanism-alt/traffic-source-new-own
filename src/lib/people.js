@@ -53,7 +53,7 @@ export function queryPeople(linkedIds, { searchClause = '', searchParams = [], l
     LEFT JOIN LATERAL (
       SELECT COUNT(*) as total_conversions, COALESCE(SUM(amount), 0) as total_spent, MAX(currency) as currency
       FROM conversions
-      WHERE site_id::text = ANY(?) AND (visitor_id = vi.visitor_id OR stripe_customer_email = vi.email) AND status = 'completed'
+      WHERE site_id::text = ANY(?) AND (visitor_id = vi.visitor_id OR LOWER(TRIM(stripe_customer_email)) = LOWER(TRIM(vi.email))) AND status = 'completed'
     ) c_agg ON true
     WHERE vi.site_id = ANY(?) ${searchClause}
     ORDER BY vi.created_at DESC

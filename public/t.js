@@ -29,6 +29,33 @@
   var LS = store('localStorage');
   var SS = store('sessionStorage');
 
+  var VERSION = '2026.11.13';
+
+  // The query string this page was loaded with. Sites often strip ?utm_… (router redirects,
+  // "clean URL" scripts) before this deferred script runs; the browser keeps the original
+  // navigation URL, so campaign parameters are read from there when the address bar lost them.
+  var CAMPAIGN_RE = /[?&](utm_[a-z]+|ref|via|source)=/i;
+  var landingQuery = location.search;
+  var navQuery = '';
+  try {
+    var navEntry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+    if (navEntry && navEntry.name) navQuery = new URL(navEntry.name).search;
+  } catch (_) {}
+  if (!CAMPAIGN_RE.test(landingQuery) && CAMPAIGN_RE.test(navQuery)) landingQuery = navQuery;
+  var landingUsed = false;
+
+  // Debug: add ?ts_debug=1 to any page (remembered; ?ts_debug=0 turns it off) to log every hit
+  var DEBUG = false;
+  try {
+    var dbg = new URLSearchParams(location.search).get('ts_debug') || new URLSearchParams(navQuery).get('ts_debug');
+    if (dbg === '1') LS.set('_ts_debug', '1');
+    if (dbg === '0') LS.set('_ts_debug', '');
+    DEBUG = LS.get('_ts_debug') === '1';
+  } catch (_) {}
+  function log() {
+    if (DEBUG && window.console) console.log.apply(console, ['[traffic-source ' + VERSION + ']'].concat([].slice.call(arguments)));
+  }
+
   var VID_KEY = '_ts_vid';
   var SID_KEY = '_ts_sid';
   var STS_KEY = '_ts_sts';
@@ -62,7 +89,7 @@
   }
 
   // Detect and persist affiliate ref parameter
-  var refParam = new URLSearchParams(location.search).get('ref');
+  var refParam = new URLSearchParams(location.search).get('ref') || new URLSearchParams(landingQuery).get('ref');
   if (refParam) {
     LS.set(REF_KEY, refParam);
   }
@@ -88,7 +115,7 @@
     return p.slice(-take).join('.');
   }
   var landingSource = (function () {
-    var q = new URLSearchParams(location.search);
+    var q = new URLSearchParams(landingQuery);
     var utm = ['utm_source', 'utm_medium', 'utm_campaign', 'ref', 'via'].map(function (k) { return q.get(k) || ''; }).join('|');
     if (utm.replace(/\|/g, '')) return 'utm:' + utm;
     try {
@@ -119,14 +146,22 @@
     return sid;
   }
 
-  function getUtm() {
-    var p = new URLSearchParams(location.search);
+  var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'source', 'via'];
+  function readUtm(query) {
+    var p = new URLSearchParams(query);
     var u = {};
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'source', 'via'].forEach(function (k) {
+    var found = false;
+    UTM_KEYS.forEach(function (k) {
       var v = p.get(k);
-      if (v) u[k] = v;
+      if (v) { u[k] = v; found = true; }
     });
-    return u;
+    return found ? u : null;
+  }
+  function getUtm() {
+    var u = readUtm(location.search);
+    // First page view of this load: fall back to the original URL if the site stripped the params
+    if (!u && !landingUsed) u = readUtm(landingQuery);
+    return u || {};
   }
 
   function build(data) {
@@ -148,6 +183,9 @@
 
   function post(items) {
     if (!items.length) return;
+    log('sending', items.map(function (i) {
+      return { type: i.type, path: i.pathname, session: i.session_id, utm_source: i.utm_source || null, referrer: i.referrer || null };
+    }));
     var payload = JSON.stringify(items.length === 1 ? items[0] : { batch: items });
     if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, payload)) return;
     try {
@@ -178,6 +216,7 @@
   // Pageviews go out immediately, carrying anything queued with them
   function send(data) {
     queue.unshift(build(data));
+    if (data.type === 'pageview') landingUsed = true;
     flush();
   }
 
@@ -348,7 +387,8 @@
   }
 
   var existingTs = window.__ts;
-  window.__ts = { vid: vid, sid: function () { return getSession(); }, track: track, identify: identify };
+  window.__ts = { version: VERSION, vid: vid, sid: function () { return getSession(); }, track: track, identify: identify };
+  log('loaded', { site: SITE_ID, landingSource: landingSource || '(none: direct)', landingQuery: landingQuery || '(none)', url: location.href, referrer: document.referrer || '(none)' });
 
   if (existingTs && Array.isArray(existingTs.q)) {
     for (var i = 0; i < existingTs.q.length; i++) {

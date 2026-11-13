@@ -2,6 +2,7 @@ import { getRow, run } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { verifySiteOwnership, getLinkedSiteIds } from '@/lib/analytics';
 import { queryPeople } from '@/lib/people';
+import { ensureEmailLinksTable } from '@/lib/email-links';
 
 let tableReady = null;
 function ensureIdentitiesTable() {
@@ -33,6 +34,7 @@ export default withAuth(async function handler(req, res) {
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
   await ensureIdentitiesTable();
+  await ensureEmailLinksTable();
 
   const pageNum = Math.max(1, parseInt(page, 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -53,15 +55,17 @@ export default withAuth(async function handler(req, res) {
   const countRow = await getRow(
     `SELECT COUNT(DISTINCT vi.email) as total
      FROM visitor_identities vi
-     WHERE vi.site_id = ANY(?) ${searchClause}`,
-    [linkedIdStrings, ...searchParams]
+     WHERE vi.site_id = ANY(?)
+       AND LOWER(TRIM(vi.email)) NOT IN (SELECT linked_email FROM email_links WHERE site_id = ANY(?))
+       ${searchClause}`,
+    [linkedIdStrings, linkedIdStrings, ...searchParams]
   );
   const total = Number(countRow?.total || 0);
 
   // Fetch people list with first/last session stats and conversion totals
   const people = await queryPeople(linkedIdStrings, { searchClause, searchParams, limit: pageSize, offset });
 
-  res.setHeader('Cache-Control', 'private, max-age=15');
+  res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     site: { id: site.id, name: site.name, domain: site.domain },
     people,

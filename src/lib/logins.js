@@ -1,4 +1,5 @@
 import { getRows } from './db';
+import { ensureEmailLinksTable } from './email-links';
 import { friendlySourceName, sourceType } from './sources';
 
 // Custom event names that count as a login (or the signup that starts one).
@@ -12,6 +13,7 @@ const LOGIN_EVENT_SQL_RE = '(log[[:space:]_-]?in|sign(ed)?[[:space:]_-]?in|sign[
  * includeIdentified: also count being identified by email (window.__ts.identify) as a login.
  */
 export async function queryLogins(linkedIds, { from, to, includeIdentified = false }) {
+  await ensureEmailLinksTable();
   // Being identified by email (everyone on All people) counts as a login: the identity row
   // (its time is the latest identify) plus the per-session 'Identified' events logged since.
   const identifiedUnion = includeIdentified
@@ -27,7 +29,7 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
 
   const params = [linkedIds, LOGIN_EVENT_SQL_RE];
   if (includeIdentified) params.push(linkedIds, linkedIds);
-  params.push(from, to, from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds);
+  params.push(from, to, from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds, linkedIds);
 
   const rows = await getRows(
     `WITH le AS (
@@ -55,10 +57,12 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
               ARRAY_AGG(DISTINCT visitor_id) FILTER (WHERE visitor_id IS NOT NULL) AS login_vids
        FROM le
        WHERE email IS NOT NULL AND email LIKE '%@%'
+         AND email NOT IN (SELECT linked_email FROM email_links WHERE site_id = ANY(?))
        GROUP BY email
      ),
      pv AS (
        SELECT p.*,
+              ARRAY[p.email] || COALESCE((SELECT ARRAY_AGG(l.linked_email) FROM email_links l WHERE l.site_id = ANY(?) AND l.email = p.email), '{}') AS emails,
               ARRAY(
                 SELECT DISTINCT x FROM unnest(
                   COALESCE(p.login_vids, '{}') ||
@@ -66,12 +70,14 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
                   -- browsers that paid with this email belong to the person too
                   COALESCE((SELECT ARRAY_AGG(c.visitor_id) FROM conversions c
                             WHERE c.site_id::text = ANY(?) AND c.visitor_id IS NOT NULL
-                              AND LOWER(TRIM(c.stripe_customer_email)) = p.email), '{}')
+                              AND LOWER(TRIM(c.stripe_customer_email)) IN (
+                                SELECT p.email UNION SELECT l.linked_email FROM email_links l WHERE l.site_id = ANY(?) AND l.email = p.email
+                              )), '{}')
                 ) x
               ) AS vids
        FROM p
      )
-     SELECT pv.email, pv.first_login, pv.last_login, pv.logins, pv.logins_in_range, pv.active_in_range, pv.provider,
+     SELECT pv.email, pv.emails, pv.first_login, pv.last_login, pv.logins, pv.logins_in_range, pv.active_in_range, pv.provider,
             fs.utm_source, fs.utm_medium, fs.utm_campaign, fs.referrer, fs.referrer_domain, fs.entry_page, fs.started_at AS first_seen,
             ls.country, ls.city, ls.device_type, ls.browser, ls.last_active,
             pay.payments, pay.spent, pay.currency, pay.last_paid, pay.refunds, pay.refunded, pay.refund_currency,
@@ -97,7 +103,7 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
               (ARRAY_AGG(UPPER(currency) ORDER BY created_at DESC) FILTER (WHERE status = 'refunded'))[1] AS refund_currency
        FROM conversions
        WHERE site_id::text = ANY(?)
-         AND (LOWER(TRIM(stripe_customer_email)) = pv.email OR visitor_id = ANY(pv.vids))
+         AND (LOWER(TRIM(stripe_customer_email)) = ANY(pv.emails) OR visitor_id = ANY(pv.vids))
      ) pay ON true`,
     params
   );
@@ -107,6 +113,7 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
     const lastActive = [r.last_active, r.last_login].filter(Boolean).map((d) => new Date(d)).sort((a, b) => b - a)[0] || null;
     return {
       email: r.email,
+      linkedEmails: (r.emails || []).slice(1),
       visitorId: r.visitor_id || null,
       firstLogin: r.first_login,
       lastLogin: r.last_login,

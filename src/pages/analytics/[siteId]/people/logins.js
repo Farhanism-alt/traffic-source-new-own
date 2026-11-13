@@ -70,6 +70,7 @@ export default function Logins() {
   const [loginOnly, setLoginOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState(null);
+  const [linkFor, setLinkFor] = useState(null);
   const requestId = useRef(0);
 
   const params = useMemo(() => {
@@ -275,6 +276,11 @@ export default function Logins() {
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                                 {r.logins} login{r.logins === 1 ? '' : 's'}{r.provider ? ` · ${r.provider}` : ''}
                               </div>
+                              {r.linkedEmails?.length > 0 && (
+                                <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 1, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`Payments under: ${r.linkedEmails.join(', ')}`}>
+                                  🔗 also pays as {r.linkedEmails.join(', ')}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -312,7 +318,10 @@ export default function Logins() {
                             </span>
                           ) : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Free</span>}
                         </td>
-                        <td style={td('right')}>
+                        <td style={{ ...td('right'), whiteSpace: 'nowrap' }}>
+                          <button className="btn btn-secondary" onClick={() => setLinkFor(r.email)} title="Link a payment made with another email to this user" aria-label={`Link payment to ${r.email}`} style={{ fontSize: 12, padding: '4px 8px', marginRight: 6 }}>
+                            🔗
+                          </button>
                           <button className="btn btn-secondary" onClick={() => setSelectedEmail(r.email)} style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}>
                             Footprint →
                           </button>
@@ -341,7 +350,137 @@ export default function Logins() {
         )}
 
         <PersonFootprintDrawer siteId={siteId} email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+        {linkFor && <LinkPaymentModal siteId={siteId} email={linkFor} onClose={() => setLinkFor(null)} onChanged={fetchData} />}
       </DashboardLayout>
     </>
+  );
+}
+
+function LinkPaymentModal({ siteId, email, onClose, onChanged }) {
+  const [links, setLinks] = useState([]);
+  const [candidates, setCandidates] = useState(null);
+  const [q, setQ] = useState('');
+  const [manual, setManual] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async (query) => {
+    const res = await fetch(`/api/analytics/${siteId}/people/links?${new URLSearchParams({ email, q: query || '' })}`);
+    if (!res.ok) return;
+    const d = await res.json();
+    setLinks(d.links);
+    setCandidates(d.candidates);
+  }, [siteId, email]);
+
+  useEffect(() => {
+    const t = setTimeout(() => load(q), 250);
+    return () => clearTimeout(t);
+  }, [load, q]);
+
+  const link = async (linked) => {
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await fetch(`/api/analytics/${siteId}/people/links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, linked_email: linked }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      setManual('');
+      setMsg(`Linked ${linked} → ${email}`);
+      await load(q);
+      onChanged?.();
+    } catch (e) {
+      setMsg(e.message || 'Could not link');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unlink = async (linked) => {
+    setBusy(true);
+    await fetch(`/api/analytics/${siteId}/people/links`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linked_email: linked }),
+    });
+    setBusy(false);
+    setMsg(`Unlinked ${linked}`);
+    await load(q);
+    onChanged?.();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3 style={{ margin: 0, fontSize: 16 }}>Link a payment to {email}</h3>
+          <button className="btn-ghost" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="modal-body" style={{ padding: 20, maxHeight: '65vh', overflowY: 'auto', fontSize: 13 }}>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            If this user paid with a different email, link that email here. Its payments then count as theirs on Logins, All people and Footprint.
+          </p>
+
+          {links.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Linked emails</div>
+              {links.map((l) => (
+                <div key={l.linked_email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border-color, #27272a)' }}>
+                  <span>{l.linked_email} <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.source === 'checkout' ? '· linked automatically at checkout' : ''}</span></span>
+                  <button className="btn btn-secondary" disabled={busy} onClick={() => unlink(l.linked_email)} style={{ fontSize: 11, padding: '2px 8px' }}>Unlink</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Payments under other emails</div>
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search payment email…"
+            aria-label="Search payment email"
+            style={{ ...controlStyle, width: '100%', marginBottom: 8 }}
+          />
+          {candidates === null ? (
+            <div style={{ color: 'var(--text-muted)', padding: 8 }}>Loading…</div>
+          ) : candidates.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', padding: 8 }}>No other payment emails{q ? ' for this search' : ''}.</div>
+          ) : (
+            <div style={{ border: '1px solid var(--border-color, #27272a)', borderRadius: 6 }}>
+              {candidates.map((c) => (
+                <div key={c.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px solid var(--border-color, #27272a)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {c.payments} payment{c.payments === 1 ? '' : 's'} · {formatMoney(c.spentCents, c.currency)} · last {shortDate(c.lastPaid)}
+                      {c.identified ? ' · also listed as its own person' : ' · not matched to anyone'}
+                    </div>
+                  </div>
+                  <button className="btn btn-primary" disabled={busy} onClick={() => link(c.email)} style={{ fontSize: 12, padding: '4px 12px' }}>Link</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontWeight: 600, margin: '16px 0 6px' }}>Or type the payment email</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="email"
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              placeholder="billing@example.com"
+              aria-label="Payment email"
+              style={{ ...controlStyle, flex: 1 }}
+            />
+            <button className="btn btn-primary" disabled={busy || !manual.includes('@')} onClick={() => link(manual)} style={{ fontSize: 12 }}>Link</button>
+          </div>
+          {msg && <div style={{ marginTop: 12, color: msg.startsWith('Linked') || msg.startsWith('Unlinked') ? '#4ade80' : '#f87171' }}>{msg}</div>}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,11 +1,13 @@
 import { getRows } from './db';
+import { ensureEmailLinksTable } from './email-links';
 
 /**
  * Identified people with first-touch acquisition, activity and revenue totals.
  * linkedIds: string site ids (a site plus its connected sites).
  * Pass limit = null to return everyone (used by the Master Export).
  */
-export function queryPeople(linkedIds, { searchClause = '', searchParams = [], limit = null, offset = 0 } = {}) {
+export async function queryPeople(linkedIds, { searchClause = '', searchParams = [], limit = null, offset = 0 } = {}) {
+  await ensureEmailLinksTable();
   const paging = limit == null ? '' : 'LIMIT ? OFFSET ?';
   return getRows(
     `SELECT
@@ -53,9 +55,15 @@ export function queryPeople(linkedIds, { searchClause = '', searchParams = [], l
     LEFT JOIN LATERAL (
       SELECT COUNT(*) as total_conversions, COALESCE(SUM(amount), 0) as total_spent, MAX(currency) as currency
       FROM conversions
-      WHERE site_id::text = ANY(?) AND (visitor_id = vi.visitor_id OR LOWER(TRIM(stripe_customer_email)) = LOWER(TRIM(vi.email))) AND status = 'completed'
+      WHERE site_id::text = ANY(?) AND status = 'completed' AND (
+        visitor_id = vi.visitor_id
+        OR LOWER(TRIM(stripe_customer_email)) = LOWER(TRIM(vi.email))
+        OR LOWER(TRIM(stripe_customer_email)) IN (SELECT linked_email FROM email_links WHERE site_id = ANY(?) AND email = LOWER(TRIM(vi.email)))
+      )
     ) c_agg ON true
-    WHERE vi.site_id = ANY(?) ${searchClause}
+    WHERE vi.site_id = ANY(?)
+      AND LOWER(TRIM(vi.email)) NOT IN (SELECT linked_email FROM email_links WHERE site_id = ANY(?))
+      ${searchClause}
     ORDER BY vi.created_at DESC
     ${paging}`,
     [
@@ -63,7 +71,9 @@ export function queryPeople(linkedIds, { searchClause = '', searchParams = [], l
       linkedIds,
       linkedIds,
       linkedIds,
+      linkedIds, // billing emails linked to the person
       linkedIds,
+      linkedIds, // hide billing emails merged into another person
       ...searchParams,
       ...(limit == null ? [] : [limit, offset]),
     ]

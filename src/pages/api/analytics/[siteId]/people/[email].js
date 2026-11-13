@@ -1,6 +1,7 @@
 import { getRows, getRow } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { verifySiteOwnership, getLinkedSiteIds } from '@/lib/analytics';
+import { getLinkedEmails } from '@/lib/email-links';
 
 export default withAuth(async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -73,14 +74,16 @@ export default withAuth(async function handler(req, res) {
       ).catch(() => [])
     : [];
 
-  // Fetch conversions
+  // Fetch conversions, including payments made with billing emails linked to this person
+  const linkedEmails = (await getLinkedEmails(linkedIdStrings, decodedEmail).catch(() => [])).map((l) => l.linked_email);
+  const allEmails = [decodedEmail, ...linkedEmails];
   const conversions = await getRows(
     `SELECT id, session_id, visitor_id, amount, currency, status, payment_provider, payment_intent_id,
             utm_source, utm_medium, utm_campaign, referrer_domain, created_at
      FROM conversions
-     WHERE site_id::text = ANY(?) AND (visitor_id = ? OR stripe_customer_email = ?)
+     WHERE site_id::text = ANY(?) AND (visitor_id = ? OR LOWER(TRIM(stripe_customer_email)) = ANY(?))
      ORDER BY created_at ASC`,
-    [linkedIdStrings, visitorId || '', decodedEmail]
+    [linkedIdStrings, visitorId || '', allEmails]
   );
 
   // Group page views & events by session

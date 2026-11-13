@@ -175,6 +175,16 @@ Record what visitors see and do, like PostHog session replay, stored in your own
 
 The recorder bundle (`public/r.js`) is built from `scripts/replay-recorder/` with `npm run build:recorder`.
 
+## Linking payments made with a different email
+
+People → Logins → 🔗 on a user links a payment's billing email to them; its payments then count as
+theirs on Logins, All people and Footprint. To link automatically, pass the logged-in user's email
+(and visitor id) as checkout metadata — Stripe `metadata`, Dodo `metadata`, LemonSqueezy `custom_data`:
+
+```js
+metadata: { ts_email: user.email, ts_visitor_id: window.__ts?.vid }
+```
+
 ## Stripe Conversion Tracking
 
 1. Go to your site's Settings and add your Stripe Secret Key

@@ -120,7 +120,7 @@ export default withAuth(async function handler(req, res) {
 
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  res.setHeader('Cache-Control', 'private, max-age=15');
+  res.setHeader('Cache-Control', 'no-store'); // links and filters must show immediately
   res.status(200).json({
     site: { id: site.id, name: site.name, domain: site.domain },
     logins: rows.slice((page - 1) * limit, page * limit),

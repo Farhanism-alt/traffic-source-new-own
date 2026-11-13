@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { getRow, getRows, run } from './db';
 import { lookupVisitorByEmail } from './visitor-identity';
+import { linkEmails } from './email-links';
 
 export async function syncStripePayments() {
   const sites = await getRows(
@@ -52,6 +53,11 @@ export async function syncStripePayments() {
 
         // Fallback: match by customer email via visitor_identities
         const customerEmail = session.customer_email || session.customer_details?.email || null;
+        // Logged-in email passed at checkout (metadata ts_email): attribute to that person and
+        // link the billing email to them when it differs.
+        const loginEmail = session.metadata?.ts_email || null;
+        if (!visitorId && loginEmail) visitorId = await lookupVisitorByEmail(site.id, loginEmail);
+        if (loginEmail && customerEmail) await linkEmails(site.id, loginEmail, customerEmail, 'checkout').catch(() => {});
         if (!visitorId && customerEmail) {
           visitorId = await lookupVisitorByEmail(site.id, customerEmail);
         }

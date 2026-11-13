@@ -290,6 +290,15 @@ const SESSION_COLUMNS = `
   browser, browser_version, os, os_version, device_type,
   screen_width, screen_height,
   page_count, is_bounce, duration, last_activity`;
+// A Direct session that later receives a page view carrying a campaign (utm_*) or an outside
+// referrer takes that source. Covers trackers that kept the session going (older cached t.js).
+const IS_DIRECT = `(sessions.utm_source IS NULL AND (sessions.referrer_domain IS NULL OR sessions.referrer_domain = ''))`;
+const HAS_SOURCE = `(EXCLUDED.utm_source IS NOT NULL OR EXCLUDED.referrer_domain IS NOT NULL)`;
+const UPGRADE = `${IS_DIRECT} AND ${HAS_SOURCE}`;
+const UPGRADE_SOURCE_SQL = ['referrer', 'referrer_domain', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']
+  .map((c) => `${c} = CASE WHEN ${UPGRADE} THEN EXCLUDED.${c} ELSE sessions.${c} END,`)
+  .join('\n           ');
+
 const SESSION_PLACEHOLDERS = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, true, 0, NOW()`;
 
 // Creates the session or records another page on it. Returns true when the session is new.
@@ -299,6 +308,7 @@ async function upsertSession(values, data) {
       const r = await run(
         `INSERT INTO sessions (${SESSION_COLUMNS}) VALUES (${SESSION_PLACEHOLDERS})
          ON CONFLICT (id) DO UPDATE SET
+           ${UPGRADE_SOURCE_SQL}
            exit_page = EXCLUDED.exit_page,
            last_activity = NOW(),
            page_count = sessions.page_count + 1,
@@ -319,6 +329,15 @@ async function upsertSession(values, data) {
   if (!existing) {
     await run(`INSERT INTO sessions (${SESSION_COLUMNS}) VALUES (${SESSION_PLACEHOLDERS})`, values);
     return true;
+  }
+  // Same Direct → campaign upgrade as the upsert path
+  const v = values;
+  if (v[7] || v[6]) {
+    await run(
+      `UPDATE sessions SET referrer = ?, referrer_domain = ?, utm_source = ?, utm_medium = ?, utm_campaign = ?, utm_term = ?, utm_content = ?
+       WHERE id = ? AND utm_source IS NULL AND (referrer_domain IS NULL OR referrer_domain = '')`,
+      [v[5], v[6], v[7], v[8], v[9], v[10], v[11], data.session_id]
+    );
   }
   await run(
     `UPDATE sessions SET

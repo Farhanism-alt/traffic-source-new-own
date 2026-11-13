@@ -23,8 +23,10 @@ const nextConfig = {
         source: '/t.js',
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
-          // Browsers re-check hourly, the CDN daily (purged on every deploy)
-          { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800' },
+          // Browsers re-check every 5 min so tracker fixes reach visitors quickly (a cheap 304
+          // from the CDN); the CDN keeps it a day and is purged on every deploy. No browser
+          // stale-while-revalidate: that kept running an old tracker for up to a week.
+          { key: 'Cache-Control', value: 'public, max-age=300, s-maxage=86400' },
         ],
       },
       {

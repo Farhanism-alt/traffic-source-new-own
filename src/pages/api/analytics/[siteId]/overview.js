@@ -1,7 +1,7 @@
 import { getRows, getRow } from '@/lib/db';
 import { withAuth } from '@/lib/withAuth';
 import { parseDateRange, verifySiteOwnership } from '@/lib/analytics';
-import { normalizeSource, getSourceDomains } from '@/lib/sources';
+import { normalizeSource, getSourceDomains, rootDomain } from '@/lib/sources';
 
 const lastSyncAt = {};
 
@@ -14,17 +14,21 @@ async function syncPaymentsForSite(siteId) {
   try { const { syncLemonSqueezyPayments } = await import('@/lib/lemonsqueezy-sync'); await syncLemonSqueezyPayments(); } catch {}
 }
 
-function buildSessionFilters(query, alias = '') {
+function buildSessionFilters(query, alias = '', siteRoot = '') {
   const pfx = alias ? `${alias}.` : '';
   const clauses = [], params = [];
   if (query.channel) {
     if (query.channel === 'Direct') {
-      clauses.push(`(${pfx}utm_source IS NULL AND (${pfx}referrer_domain IS NULL OR ${pfx}referrer_domain = ''))`);
+      // Older sessions may carry the site's own domain as referrer: that's internal, so Direct
+      clauses.push(`(${pfx}utm_source IS NULL AND (${pfx}referrer_domain IS NULL OR ${pfx}referrer_domain = ''
+        OR LOWER(${pfx}referrer_domain) = ? OR LOWER(${pfx}referrer_domain) LIKE ?))`);
+      params.push(siteRoot || '-', siteRoot ? `%.${siteRoot}` : '-');
     } else {
       const aliases = getSourceDomains(query.channel);
-      const allVals = [query.channel, ...aliases];
+      // utm_source spellings vary in case (IG, ig, Instagram): compare lower-cased
+      const allVals = [...new Set([query.channel, ...aliases].map((v) => v.toLowerCase()))];
       const ph = allVals.map(() => '?').join(', ');
-      clauses.push(`(${pfx}utm_source IN (${ph}) OR ${pfx}referrer_domain IN (${ph}))`);
+      clauses.push(`(LOWER(${pfx}utm_source) IN (${ph}) OR LOWER(${pfx}referrer_domain) IN (${ph}))`);
       params.push(...allVals, ...allVals);
     }
   }
@@ -65,8 +69,9 @@ export default withAuth(async function handler(req, res) {
   prevFrom.setDate(prevFrom.getDate() - daysDiff);
   const prevRange = { from: prevFrom.toISOString().slice(0, 10), to: new Date(fromDate.getTime() - 86400000).toISOString().slice(0, 10) };
 
-  const sf = buildSessionFilters(req.query);
-  const sfAliased = buildSessionFilters(req.query, 's');
+  const siteRoot = rootDomain(site.domain);
+  const sf = buildSessionFilters(req.query, '', siteRoot);
+  const sfAliased = buildSessionFilters(req.query, 's', siteRoot);
   const pvf = buildPageViewFilters(req.query);
   const useSessionFilters = hasSessionFilters(req.query);
   const usePageFilter = !!req.query.page;
@@ -193,10 +198,17 @@ export default withAuth(async function handler(req, res) {
 
   const [timeSeries, sources, pages, entryPages, exitPages, countries, cities, browsers, os, devices, convTotals, convBySource, convTimeSeries, affiliateBreakdown, rawDailySources, newReturning, topEvents, annotations, prevTimeSeries] = await Promise.all([timeSeriesPromise, sourcesPromise, pagesPromise, entryPagesPromise, exitPagesPromise, countriesPromise, citiesPromise, browsersPromise, osPromise, devicesPromise, convTotalsPromise, convBySourcePromise, convTimeSeriesPromise, affiliateBreakdownPromise, rawDailySourcesPromise, newReturningPromise, topEventsPromise, annotationsPromise, prevTimeSeriesPromise]);
 
+  // Friendly source name; the site's own domain (older sessions) is internal traffic, so Direct
+  const sourceName = (raw) => {
+    const v = String(raw ?? 'Direct');
+    if (siteRoot && v.includes('.') && rootDomain(v) === siteRoot) return 'Direct';
+    return normalizeSource(v) || v;
+  };
+
   function mergeSources(rows, countKey) {
     const merged = new Map();
     for (const row of rows) {
-      const name = normalizeSource(String(row.name)) || row.name;
+      const name = sourceName(row.name);
       if (merged.has(name)) {
         const ex = merged.get(name);
         if (countKey in row) ex[countKey] = Number(ex[countKey]) + Number(row[countKey]);
@@ -213,7 +225,7 @@ export default withAuth(async function handler(req, res) {
   const dailySources = {}, dailySourcesAll = {};
   for (const row of rawDailySources) {
     const dateKey = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date;
-    const source = normalizeSource(row.source) || row.source;
+    const source = sourceName(row.source);
     const count = Number(row.count);
     if (!dailySources[dateKey] || count > Number(dailySources[dateKey].count)) {
       dailySources[dateKey] = { source, count };

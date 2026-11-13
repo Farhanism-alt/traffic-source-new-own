@@ -5,6 +5,8 @@ const DOMAIN_TO_SOURCE = {
   'x.com': 'X',
   // Instagram
   'instagram.com': 'Instagram',
+  'lm.instagram.com': 'Instagram',
+  'threads.net': 'Threads',
   'l.instagram.com': 'Instagram',
   // Facebook
   'facebook.com': 'Facebook',
@@ -45,6 +47,10 @@ const DOMAIN_TO_SOURCE = {
   'yahoo.com': 'Yahoo',
   'yandex.com': 'Yandex',
   'baidu.com': 'Baidu',
+  'ecosia.org': 'Ecosia',
+  'search.brave.com': 'Brave Search',
+  'startpage.com': 'Startpage',
+  'mail.google.com': 'Gmail',
   // AI Engines & Chatbots
   'chatgpt.com': 'ChatGPT',
   'chat.openai.com': 'ChatGPT',
@@ -56,25 +62,72 @@ const DOMAIN_TO_SOURCE = {
   'x.ai': 'Grok',
 };
 
+// Android apps send android-app://<package>/ as the referrer
+const ANDROID_APP_TO_SOURCE = {
+  'com.google.android.googlequicksearchbox': 'Google',
+  'com.google.android.gm': 'Gmail',
+  'com.google.android.youtube': 'YouTube',
+  'com.instagram.android': 'Instagram',
+  'com.facebook.katana': 'Facebook',
+  'com.facebook.orca': 'Facebook',
+  'com.twitter.android': 'X',
+  'com.linkedin.android': 'LinkedIn',
+  'com.reddit.frontpage': 'Reddit',
+  'com.whatsapp': 'WhatsApp',
+  'org.telegram.messenger': 'Telegram',
+  'com.slack': 'Slack',
+  'com.discord': 'Discord',
+  'com.pinterest': 'Pinterest',
+  'com.zhiliaoapp.musically': 'TikTok',
+};
+
+/**
+ * Friendly name for a referrer domain or utm_source value: chatgpt.com → ChatGPT,
+ * in.search.yahoo.com → Yahoo, ig → Instagram, Android app ids → the app. Unknown values pass through.
+ */
 export function normalizeSource(name) {
   if (!name || name === 'Direct') return name;
-  const lower = name.toLowerCase().replace(/^www\./, '');
+  const lower = String(name).toLowerCase().trim().replace(/^www\./, '');
+  if (ANDROID_APP_TO_SOURCE[lower]) return ANDROID_APP_TO_SOURCE[lower];
+  if (DOMAIN_TO_SOURCE[lower]) return DOMAIN_TO_SOURCE[lower];
   if (/^google\./.test(lower)) return 'Google';
-  return DOMAIN_TO_SOURCE[lower] || name;
+  // Subdomains of a known site: in.search.yahoo.com → yahoo.com, m.reddit.com → reddit.com
+  const parts = lower.split('.');
+  for (let i = 1; i < parts.length - 1; i++) {
+    const d = parts.slice(i).join('.');
+    if (DOMAIN_TO_SOURCE[d]) return DOMAIN_TO_SOURCE[d];
+  }
+  if (Object.prototype.hasOwnProperty.call(TOKEN_TO_SOURCE, lower)) return TOKEN_TO_SOURCE[lower];
+  return name;
+}
+
+/** Registrable domain, roughly: www.app.example.co.uk → example.co.uk, app.inspoai.io → inspoai.io */
+export function rootDomain(host) {
+  const bare = String(host || '').toLowerCase().trim().replace(/^[a-z]+:\/\//, '').split('/')[0].split(':')[0];
+  const parts = bare.replace(/\.$/, '').split('.').filter(Boolean);
+  if (parts.length <= 2) return parts.join('.');
+  const sld = parts[parts.length - 2];
+  const tld = parts[parts.length - 1];
+  const take = tld.length === 2 && ['co', 'com', 'org', 'net', 'ac', 'gov', 'edu', 'ne', 'or'].includes(sld) ? 3 : 2;
+  return parts.slice(-take).join('.');
 }
 
 // All raw domains that map to a given friendly name — used to expand DB filters
 export function getSourceDomains(friendlyName) {
-  return Object.entries(DOMAIN_TO_SOURCE)
-    .filter(([, n]) => n === friendlyName)
-    .map(([domain]) => domain);
+  const pick = (map) => Object.entries(map).filter(([, n]) => n === friendlyName).map(([k]) => k);
+  return [...new Set([
+    ...pick(DOMAIN_TO_SOURCE),
+    ...pick(DOMAIN_TO_SOURCE).map((d) => `www.${d}`),
+    ...pick(ANDROID_APP_TO_SOURCE),
+    ...pick(TOKEN_TO_SOURCE),
+  ])];
 }
 
 // ---- Source types: AI / Search / Social / Referral / Direct ----------------
 
 const AI_SOURCES = ['ChatGPT', 'Claude', 'Perplexity', 'Google Gemini', 'Copilot', 'Grok'];
-const SEARCH_SOURCES = ['Google', 'Bing', 'DuckDuckGo', 'Yahoo', 'Yandex', 'Baidu'];
-const SOCIAL_SOURCES = ['X', 'Instagram', 'Facebook', 'Reddit', 'YouTube', 'LinkedIn', 'TikTok', 'Pinterest', 'WhatsApp', 'Telegram', 'Hacker News', 'Product Hunt'];
+const SEARCH_SOURCES = ['Google', 'Bing', 'DuckDuckGo', 'Yahoo', 'Yandex', 'Baidu', 'Ecosia', 'Brave Search', 'Startpage'];
+const SOCIAL_SOURCES = ['X', 'Instagram', 'Facebook', 'Reddit', 'YouTube', 'LinkedIn', 'TikTok', 'Pinterest', 'WhatsApp', 'Telegram', 'Hacker News', 'Product Hunt', 'Threads', 'Discord', 'Slack'];
 
 // Bare utm_source values people commonly use (utm_source=reddit, utm_source=chatgpt.com, ...)
 const AI_TOKENS = ['chatgpt', 'openai', 'claude', 'anthropic', 'perplexity', 'gemini', 'copilot', 'grok', 'deepseek', 'mistral', 'you.com', 'phind'];
@@ -120,17 +173,16 @@ export function sourceTypeSql(expr) {
 
 // Bare utm_source spellings → the friendly names used for referrer domains.
 const TOKEN_TO_SOURCE = {
-  reddit: 'Reddit', twitter: 'X', x: 'X', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram',
+  reddit: 'Reddit', twitter: 'X', x: 'X', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram', insta: 'Instagram',
+  threads: 'Threads', discord: 'Discord', gmail: 'Gmail', newsletter: 'Newsletter', email: 'Email',
   linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok', pinterest: 'Pinterest', whatsapp: 'WhatsApp', telegram: 'Telegram',
   hackernews: 'Hacker News', 'hacker news': 'Hacker News', hn: 'Hacker News', producthunt: 'Product Hunt', 'product hunt': 'Product Hunt',
   google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo', yahoo: 'Yahoo', yandex: 'Yandex', baidu: 'Baidu',
   chatgpt: 'ChatGPT', openai: 'ChatGPT', claude: 'Claude', perplexity: 'Perplexity', gemini: 'Google Gemini', copilot: 'Copilot', grok: 'Grok',
 };
 
-/** normalizeSource() that also folds bare utm_source values (reddit, chatgpt, ...) into the same names. */
+/** Kept for callers: normalizeSource() now also folds bare utm_source values (reddit, ig, chatgpt, ...). */
 export function friendlySourceName(raw) {
   if (!raw || raw === 'Direct') return 'Direct';
-  const n = normalizeSource(raw);
-  if (n !== raw) return n;
-  return TOKEN_TO_SOURCE[String(raw).toLowerCase().trim()] || n;
+  return normalizeSource(raw);
 }

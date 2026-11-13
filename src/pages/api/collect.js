@@ -1,5 +1,5 @@
 import { getRow, run } from '@/lib/db';
-import { normalizeSource } from '@/lib/sources';
+import { normalizeSource, rootDomain } from '@/lib/sources';
 import { upsertVisitorIdentity } from '@/lib/visitor-identity';
 import { LOGIN_EVENT_RE } from '@/lib/logins';
 const UAParser = require('ua-parser-js');
@@ -161,7 +161,12 @@ async function processHit(data, req) {
   let referrerDomain = null;
   if (data.referrer) {
     try {
-      referrerDomain = normalizeSource(new URL(data.referrer).hostname);
+      const refHost = new URL(data.referrer).hostname;
+      // A referrer on the same site (www., app. and other subdomains) is internal
+      // navigation, not a traffic source: the session counts as Direct.
+      if (!data.hostname || rootDomain(refHost) !== rootDomain(data.hostname)) {
+        referrerDomain = normalizeSource(refHost);
+      }
     } catch {
       // invalid referrer URL
     }

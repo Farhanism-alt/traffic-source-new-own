@@ -11,6 +11,24 @@
   // Skip automated browsers and crawlers — they only cost requests
   if (navigator.webdriver || /bot|crawl|spider|slurp|headless|lighthouse|pagespeed|prerender|phantom/i.test(navigator.userAgent || '')) return;
 
+  // Storage can be blocked (Safari "Block all cookies", some in-app browsers, sandboxed
+  // iframes): every access goes through these so tracking keeps working without it.
+  var memStore = {};
+  function store(kind) {
+    return {
+      get: function (k) {
+        try { var v = window[kind].getItem(k); if (v !== null) return v; } catch (_) {}
+        return Object.prototype.hasOwnProperty.call(memStore, kind + k) ? memStore[kind + k] : null;
+      },
+      set: function (k, v) {
+        memStore[kind + k] = v;
+        try { window[kind].setItem(k, v); } catch (_) {}
+      },
+    };
+  }
+  var LS = store('localStorage');
+  var SS = store('sessionStorage');
+
   var VID_KEY = '_ts_vid';
   var SID_KEY = '_ts_sid';
   var STS_KEY = '_ts_sts';
@@ -46,32 +64,58 @@
   // Detect and persist affiliate ref parameter
   var refParam = new URLSearchParams(location.search).get('ref');
   if (refParam) {
-    localStorage.setItem(REF_KEY, refParam);
+    LS.set(REF_KEY, refParam);
   }
 
-  var vid = localStorage.getItem(VID_KEY) || getCookie(VID_KEY);
+  var vid = LS.get(VID_KEY) || getCookie(VID_KEY);
   if (!vid) {
     vid = uid();
   }
-  localStorage.setItem(VID_KEY, vid);
+  LS.set(VID_KEY, vid);
   setCookie(VID_KEY, vid, 31536000);
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
   }
 
+  // Where this page load came from: a campaign (utm_*) or another website. Arriving from a
+  // new source starts a new session, like Google Analytics, so the visit is credited to it.
+  var SRC_KEY = '_ts_src';
+  function rootOf(host) {
+    var p = String(host || '').toLowerCase().split('.');
+    if (p.length <= 2) return p.join('.');
+    var take = p[p.length - 1].length === 2 && /^(co|com|org|net|ac|gov|edu|ne|or)$/.test(p[p.length - 2]) ? 3 : 2;
+    return p.slice(-take).join('.');
+  }
+  var landingSource = (function () {
+    var q = new URLSearchParams(location.search);
+    var utm = ['utm_source', 'utm_medium', 'utm_campaign', 'ref', 'via'].map(function (k) { return q.get(k) || ''; }).join('|');
+    if (utm.replace(/\|/g, '')) return 'utm:' + utm;
+    try {
+      var refHost = document.referrer ? new URL(document.referrer).hostname : '';
+      if (refHost && rootOf(refHost) !== rootOf(location.hostname)) return 'ref:' + refHost;
+    } catch (_) {}
+    return '';
+  })();
+
   function getSession() {
-    var stored = sessionStorage.getItem(SID_KEY) || getCookie(SID_KEY);
-    var ts = parseInt(sessionStorage.getItem(STS_KEY) || '0', 10);
+    var stored = SS.get(SID_KEY) || getCookie(SID_KEY);
+    var ts = parseInt(SS.get(STS_KEY) || getCookie(STS_KEY) || '0', 10);
+    var prevSource = SS.get(SRC_KEY) || getCookie(SRC_KEY) || '';
     var sid;
-    if (stored && Date.now() - ts < TIMEOUT) {
+    if (stored && Date.now() - ts < TIMEOUT && !(landingSource && landingSource !== decodeURIComponent(prevSource))) {
       sid = stored;
     } else {
       sid = uid();
     }
-    sessionStorage.setItem(SID_KEY, sid);
-    sessionStorage.setItem(STS_KEY, String(Date.now()));
+    if (landingSource) {
+      SS.set(SRC_KEY, encodeURIComponent(landingSource));
+      setCookie(SRC_KEY, encodeURIComponent(landingSource), 1800);
+    }
+    SS.set(SID_KEY, sid);
+    SS.set(STS_KEY, String(Date.now()));
     setCookie(SID_KEY, sid, 1800);
+    setCookie(STS_KEY, String(Date.now()), 1800);
     return sid;
   }
 
@@ -97,7 +141,7 @@
     data.screen_height = screen.height;
     if (data.type !== 'event') Object.assign(data, getUtm());
 
-    var ref = localStorage.getItem(REF_KEY);
+    var ref = LS.get(REF_KEY);
     if (ref) data.ref = ref;
     return data;
   }
@@ -150,9 +194,9 @@
     email = String(email).trim().toLowerCase();
     // Each email is sent once per session (blur + change + submit all fire for the same field)
     var sent = '';
-    try { sent = sessionStorage.getItem(IDN_KEY) || ''; } catch (_) {}
+    sent = SS.get(IDN_KEY) || '';
     if (sent === email) return;
-    try { sessionStorage.setItem(IDN_KEY, email); } catch (_) {}
+    SS.set(IDN_KEY, email);
     enqueue({ type: 'identify', email: email });
   }
 
@@ -233,6 +277,11 @@
   });
   window.addEventListener('pagehide', flush);
 
+  // Back/forward restores from the browser cache don't reload the script: count them too
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) { lastUrl = location.href; send({ type: 'pageview' }); }
+  });
+
   // SPA support — only fire when URL actually changes
   var lastUrl = location.href;
   var pushState = history.pushState;
@@ -256,7 +305,7 @@
   // Session replay: the recorder (r.js) loads only when replay is on for this site
   // and this session is sampled in. Opt out per page with data-replay="off" on the script tag.
   function currentSid() {
-    try { return sessionStorage.getItem(SID_KEY) || getCookie(SID_KEY) || ''; } catch (_) { return getCookie(SID_KEY) || ''; }
+    return SS.get(SID_KEY) || getCookie(SID_KEY) || '';
   }
   function startReplay(cfg) {
     if (!cfg || !cfg.enabled) return;

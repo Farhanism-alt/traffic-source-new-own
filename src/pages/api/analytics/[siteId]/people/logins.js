@@ -6,7 +6,7 @@ import { SOURCE_TYPES } from '@/lib/sources';
 // Logged-in users: one row per email.
 // ?search= &source=<name or AI|Search|Social|Referral|Direct> &paid=paid|unpaid
 // &date_mode=active|first (logged in during the range | first login in the range)
-// &include_identified=1 &sort= &order= &page= &limit= &format=csv
+// &login_only=1 (only explicit login events, not everyone identified by email) &sort= &order= &page= &limit= &format=csv
 
 const SORTS = {
   last_login: (r) => new Date(r.lastLogin || 0).getTime(),
@@ -37,7 +37,7 @@ export default withAuth(async function handler(req, res) {
 
   let all;
   try {
-    all = await queryLogins(ids, { from, to, includeIdentified: req.query.include_identified === '1' });
+    all = await queryLogins(ids, { from, to, includeIdentified: req.query.login_only !== '1' });
   } catch (err) {
     if (err.code === '42P01') all = []; // events / identities tables not created yet
     else throw err;

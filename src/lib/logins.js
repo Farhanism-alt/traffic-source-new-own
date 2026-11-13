@@ -12,16 +12,22 @@ const LOGIN_EVENT_SQL_RE = '(log[[:space:]_-]?in|sign(ed)?[[:space:]_-]?in|sign[
  * includeIdentified: also count being identified by email (window.__ts.identify) as a login.
  */
 export async function queryLogins(linkedIds, { from, to, includeIdentified = false }) {
+  // Being identified by email (everyone on All people) counts as a login: the identity row
+  // (its time is the latest identify) plus the per-session 'Identified' events logged since.
   const identifiedUnion = includeIdentified
     ? `UNION ALL
-       SELECT vi.visitor_id, NULL::text AS session_id, vi.created_at, 'Identified' AS name, NULL::text AS provider, LOWER(vi.email) AS email
+       SELECT vi.visitor_id, NULL::text AS session_id, vi.created_at, '_identity' AS name, NULL::text AS provider, LOWER(vi.email) AS email
        FROM visitor_identities vi
-       WHERE vi.site_id = ANY(?)`
+       WHERE vi.site_id = ANY(?)
+       UNION ALL
+       SELECT e.visitor_id, e.session_id, e.created_at, e.name, NULL::text AS provider, LOWER(e.properties->>'_email') AS email
+       FROM events e
+       WHERE e.site_id = ANY(?) AND e.name = 'Identified'`
     : '';
 
   const params = [linkedIds, LOGIN_EVENT_SQL_RE];
-  if (includeIdentified) params.push(linkedIds);
-  params.push(from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds);
+  if (includeIdentified) params.push(linkedIds, linkedIds);
+  params.push(from, to, from, to, from, to, linkedIds, linkedIds, linkedIds, linkedIds);
 
   const rows = await getRows(
     `WITH le AS (
@@ -40,8 +46,10 @@ export async function queryLogins(linkedIds, { from, to, includeIdentified = fal
        SELECT email,
               MIN(created_at) AS first_login,
               MAX(created_at) AS last_login,
-              COUNT(*) AS logins,
-              COUNT(*) FILTER (WHERE created_at BETWEEN ? AND ?) AS logins_in_range,
+              -- the identity row marks a time but isn't a login of its own when history exists
+              GREATEST(COUNT(*) FILTER (WHERE name <> '_identity'), 1) AS logins,
+              GREATEST(COUNT(*) FILTER (WHERE created_at BETWEEN ? AND ? AND name <> '_identity'),
+                       CASE WHEN BOOL_OR(created_at BETWEEN ? AND ?) THEN 1 ELSE 0 END) AS logins_in_range,
               BOOL_OR(created_at BETWEEN ? AND ?) AS active_in_range,
               (ARRAY_AGG(provider ORDER BY created_at DESC) FILTER (WHERE provider IS NOT NULL))[1] AS provider,
               ARRAY_AGG(DISTINCT visitor_id) FILTER (WHERE visitor_id IS NOT NULL) AS login_vids

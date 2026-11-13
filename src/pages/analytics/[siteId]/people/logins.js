@@ -67,7 +67,7 @@ export default function Logins() {
   const [paid, setPaid] = useState('');
   const [dateMode, setDateMode] = useState('active');
   const [sort, setSort] = useState('last_login:desc');
-  const [includeIdentified, setIncludeIdentified] = useState(false);
+  const [loginOnly, setLoginOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState(null);
   const requestId = useRef(0);
@@ -82,9 +82,9 @@ export default function Logins() {
       ...(search ? { search } : {}),
       ...(source ? { source } : {}),
       ...(paid ? { paid } : {}),
-      ...(includeIdentified ? { include_identified: '1' } : {}),
+      ...(loginOnly ? { login_only: '1' } : {}),
     };
-  }, [period, customRange, sort, dateMode, search, source, paid, includeIdentified]);
+  }, [period, customRange, sort, dateMode, search, source, paid, loginOnly]);
 
   const fetchData = useCallback(async () => {
     if (!siteId) return;
@@ -164,7 +164,7 @@ export default function Logins() {
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Logins</h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              Everyone who logged in to your app, where they came from, and whether they paid.
+              Everyone identified on your site or app (logged in or gave their email), where they came from, and whether they paid.
             </p>
           </div>
           {totals && (
@@ -217,9 +217,9 @@ export default function Logins() {
             <option value="spent:desc">Most spent</option>
             <option value="email:asc">Email A → Z</option>
           </select>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }} title="Also count people identified by email (identify) who have no login event">
-            <input type="checkbox" checked={includeIdentified} onChange={(e) => setIncludeIdentified(e.target.checked)} />
-            Include identified without login event
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }} title="Only people whose app sent a login event (e.g. track('User Login')), not everyone identified by email">
+            <input type="checkbox" checked={loginOnly} onChange={(e) => setLoginOnly(e.target.checked)} />
+            Only explicit login events
           </label>
           {filtered && (
             <button className="btn btn-secondary" onClick={() => { setSearchInput(''); setSearch(''); setSource(''); setPaid(''); }} style={{ height: 36, fontSize: 12, padding: '0 12px' }}>
@@ -240,7 +240,9 @@ export default function Logins() {
             <p style={{ color: 'var(--text-muted)', maxWidth: 520, margin: '0 auto', fontSize: 13, lineHeight: 1.6 }}>
               {filtered || data?.totalLoginUsers
                 ? 'Try a wider date range (All) or clear the filters.'
-                : <>Logins come from <code>window.__ts.track(&apos;User Login&apos;)</code> in your app (see Supabase / App Setup on the People tab). Until then, tick “Include identified without login event” to list everyone identified by email.</>}
+                : loginOnly
+                  ? 'No login events yet. Untick “Only explicit login events” to see everyone identified by email.'
+                  : 'People show up here once they are identified by email, the same as on All people.'}
             </p>
           </div>
         ) : (

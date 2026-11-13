@@ -108,6 +108,12 @@ async function processHit(data, req) {
     const email = (data.email || '').trim().toLowerCase();
     if (!email || email.indexOf('@') < 1) return 400;
     await upsertVisitorIdentity(data.site_id, data.visitor_id, email);
+    // History for the Logins tab (first login, login count). The tracker sends each email once per session.
+    await ensureEventsTable();
+    await run(
+      `INSERT INTO events (site_id, session_id, visitor_id, name, properties) VALUES (?, ?, ?, 'Identified', ?)`,
+      [data.site_id, data.session_id, data.visitor_id, JSON.stringify({ _email: email })]
+    ).catch(() => {});
     return 200;
   }
 

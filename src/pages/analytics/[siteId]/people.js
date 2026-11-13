@@ -6,6 +6,7 @@ import VisitorAvatar from '@/components/ui/VisitorAvatar';
 import CountryFlag from '@/components/ui/CountryFlag';
 import ChannelIcon from '@/components/ui/ChannelIcon';
 import PersonFootprintDrawer from '@/components/ui/PersonFootprintDrawer';
+import PeopleTabs from '@/components/ui/PeopleTabs';
 import { getCountryName } from '@/lib/formatters';
 import { downloadMasterExport } from '@/lib/masterExport';
 
@@ -202,6 +203,7 @@ CREATE TRIGGER on_auth_user_created_traffic_source
         <title>People – {site?.name || site?.domain || 'SAC MAC'}</title>
       </Head>
       <DashboardLayout siteId={siteId} siteName={site?.name} siteDomain={site?.domain}>
+        <PeopleTabs siteId={siteId} active="people" />
         <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <div>
             <h1 className="page-title" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>

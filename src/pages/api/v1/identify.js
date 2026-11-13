@@ -54,6 +54,15 @@ export default async function handler(req, res) {
       [siteId, visitorId, email]
     );
 
+    // The Supabase auth trigger fires on signup: record it as a login so it shows in Logins.
+    if (body.record || body.user_id) {
+      await run(
+        `INSERT INTO events (site_id, session_id, visitor_id, name, properties) VALUES (?, NULL, ?, 'User Signup', ?)`,
+        [siteId, body.visitor_id || body.visitorId || body.record?.raw_user_meta_data?.visitor_id || null,
+          JSON.stringify({ _email: email, provider: body.record?.raw_app_meta_data?.provider || body.provider || null, source: 'supabase_webhook' })]
+      ).catch(() => {}); // events table may not exist yet on a brand-new install
+    }
+
     return res.status(200).json({
       success: true,
       message: `Successfully identified ${email} for site ${siteId}`,

@@ -1,6 +1,7 @@
 import { getRow, run } from '@/lib/db';
 import { normalizeSource } from '@/lib/sources';
 import { upsertVisitorIdentity } from '@/lib/visitor-identity';
+import { LOGIN_EVENT_RE } from '@/lib/logins';
 const UAParser = require('ua-parser-js');
 
 export const config = {
@@ -114,9 +115,20 @@ async function processHit(data, req) {
   if (data.type === 'event') {
     if (!data.name) return 400;
     await ensureEventsTable();
+    const name = String(data.name).slice(0, 100);
+    const props = data.props && typeof data.props === 'object' ? { ...data.props } : {};
+    // Login events keep the email they belong to, so the Logins list stays right when the
+    // same person later signs in from another device (identities only keep the latest visitor).
+    if (LOGIN_EVENT_RE.test(name) && !props._email) {
+      const who = await getRow(
+        'SELECT email FROM visitor_identities WHERE site_id = ? AND visitor_id = ? ORDER BY created_at DESC LIMIT 1',
+        [String(data.site_id), data.visitor_id]
+      ).catch(() => null);
+      if (who?.email) props._email = who.email;
+    }
     await run(
       `INSERT INTO events (site_id, session_id, visitor_id, name, properties) VALUES (?, ?, ?, ?, ?)`,
-      [data.site_id, data.session_id, data.visitor_id, String(data.name).slice(0, 100), JSON.stringify(data.props || {})]
+      [data.site_id, data.session_id, data.visitor_id, name, JSON.stringify(props)]
     );
     return 200;
   }
